@@ -3,15 +3,15 @@
 # =========================== Makefile options. ===============================
 
 # Global build options.
-ARCH ?= x86_64
+ARCH ?= riscv64
 BENCHMARK ?= none
 BOOT_METHOD ?= grub-rescue-iso
 BOOT_PROTOCOL ?= multiboot2
 BUILD_SYSCALL_TEST ?= 0
-ENABLE_KVM ?= 1
+ENABLE_KVM ?= 0
 INTEL_TDX ?= 0
 MEM ?= 8G
-OVMF ?= on
+OVMF ?= off
 RELEASE ?= 0
 RELEASE_LTO ?= 0
 LOG_LEVEL ?= error
@@ -345,3 +345,31 @@ clean:
 	@$(MAKE) --no-print-directory -C test clean
 	@echo "Uninstalling OSDK"
 	@rm -f $(CARGO_OSDK)
+
+
+EXT2_IMAGE := ./ext2.img
+
+$(EXT2_IMAGE):
+	@dd if=/dev/zero of=$(EXT2_IMAGE) bs=1M count=1024
+	@mke2fs $(EXT2_IMAGE)
+
+QEMU_FLAGS := \
+    -cpu rv64,zba=true,zbb=true \
+    -machine virt \
+    -m 8G \
+    --no-reboot \
+    -nographic \
+    -display none \
+    -serial chardev:mux \
+    -monitor chardev:mux \
+	-drive if=none,format=raw,id=x0,file=./ext2.img \
+    -device virtio-blk-device,drive=x0 \
+    -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
+    -device virtio-keyboard-device \
+    -device virtio-serial-device \
+    -device virtconsole,chardev=mux \
+
+.PHONY: qemu
+qemu: $(EXT2_IMAGE)
+	@RUSTFLAGS="-C relocation-model=static -C relro-level=off -C force-unwind-tables=yes --check-cfg cfg(ktest) -C no-redzone=y" cargo build --package main  --target riscv64gc-unknown-none-elf -Zbuild-std=core,alloc,compiler_builtins -Zbuild-std-features=compiler-builtins-mem
+	@qemu-system-riscv64 $(QEMU_FLAGS) -kernel ./target/riscv64gc-unknown-none-elf/debug/main

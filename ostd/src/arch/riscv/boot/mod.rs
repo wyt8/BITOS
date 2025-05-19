@@ -111,7 +111,9 @@ fn parse_initramfs_range() -> Option<(usize, usize)> {
 pub extern "C" fn riscv_boot(_hart_id: usize, device_tree_paddr: usize) -> ! {
     early_println!("Enter riscv_boot");
 
+    early_println!("device_tree_paddre: {:#x}", device_tree_paddr);
     let device_tree_ptr = paddr_to_vaddr(device_tree_paddr) as *const u8;
+    early_println!("device_tree_ptr: {:#x}", device_tree_ptr as usize);
     let fdt = unsafe { fdt::Fdt::from_ptr(device_tree_ptr).unwrap() };
     DEVICE_TREE.call_once(|| fdt);
 

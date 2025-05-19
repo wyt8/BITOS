@@ -69,7 +69,7 @@ impl log::Log for Logger {
 
 /// Initialize the logger. Users should avoid using the log macros before this function is called.
 pub(crate) fn init() {
-    let level = get_log_level().unwrap_or(LevelFilter::Off);
+    let level = get_log_level().unwrap_or(LevelFilter::Trace);
     log::set_max_level(level);
     log::set_logger(&LOGGER).unwrap();
 }
