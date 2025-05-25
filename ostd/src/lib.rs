@@ -73,6 +73,8 @@ pub use self::{error::Error, prelude::Result};
 // boot stage only global variables.
 #[doc(hidden)]
 unsafe fn init() {
+    logger::init();
+
     arch::enable_cpu_features();
 
     // SAFETY: This function is called only once, before `allocator::init`
@@ -87,7 +89,7 @@ unsafe fn init() {
     #[cfg(not(target_arch = "x86_64"))]
     arch::serial::init();
 
-    logger::init();
+    // logger::init();
 
     // SAFETY:
     // 1. They are only called once in the boot context of the BSP.

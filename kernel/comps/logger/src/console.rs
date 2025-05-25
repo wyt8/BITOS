@@ -32,6 +32,20 @@ pub fn _print(args: fmt::Arguments) {
         }
     }
 
+    struct EarlyPrinter;
+    impl Write for EarlyPrinter {
+        fn write_str(&mut self, s: &str) -> fmt::Result {
+            ostd::early_print!("{}", s);
+            Ok(())
+        }
+    }
+
+    // If there is no console device, print to early print.
+    if devices.is_empty() {
+        EarlyPrinter.write_fmt(args).unwrap();
+        return;
+    }
+
     Printer(devices).write_fmt(args).unwrap();
 }
 

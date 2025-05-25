@@ -52,11 +52,19 @@ pub(crate) fn init() -> Result<()> {
     }
 
     PCI_BASE_ADDR.call_once(|| {
-        IoMem::acquire(
-            (region.starting_address as usize)
-                ..(region.starting_address as usize + region.size.unwrap()),
-        )
-        .unwrap()
+        // IoMem::acquire(
+        //     (region.starting_address as usize)
+        //         ..(region.starting_address as usize + region.size.unwrap()),
+        // )
+        // .unwrap()
+        unsafe {
+            IoMem::new(
+                (region.starting_address as usize)
+                    ..(region.starting_address as usize) + region.size.unwrap(),
+                crate::mm::page_prop::PageFlags::RW,
+                crate::mm::page_prop::CachePolicy::Uncacheable,
+            )
+        }
     });
 
     Ok(())

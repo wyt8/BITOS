@@ -9,6 +9,9 @@ CUR_DIR := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 INITRAMFS ?= $(CUR_DIR)/../build/initramfs
 TEST_BUILD_DIR ?= $(INITRAMFS)/test
 
+# The C compiler to use
+CC := gcc
+
 # These test apps are sorted by name
 TEST_APPS := \
 	alarm \
@@ -52,7 +55,7 @@ all: $(TEST_APPS) scripts
 
 .PHONY: $(TEST_APPS)
 $(TEST_APPS):
-	@make --no-print-directory -C $@
+	@make --no-print-directory -C $@ CC=$(CC)
 
 .PHONY: format
 format:

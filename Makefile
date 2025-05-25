@@ -14,8 +14,8 @@ MEM ?= 8G
 OVMF ?= off
 RELEASE ?= 0
 RELEASE_LTO ?= 0
-LOG_LEVEL ?= error
-SCHEME ?= ""
+LOG_LEVEL ?= trace
+SCHEME ?= "riscv"
 SMP ?= 1
 OSTD_TASK_STACK_SIZE_IN_PAGES ?= 64
 FEATURES ?=
@@ -214,10 +214,11 @@ test_osdk:
 
 .PHONY: initramfs
 initramfs:
-	@$(MAKE) --no-print-directory -C test
+	@$(MAKE) --no-print-directory -C initramfs
 
 .PHONY: build
 build: initramfs $(CARGO_OSDK)
+	@echo "$(CARGO_OSDK_ARGS)"
 	@cd kernel && cargo osdk build $(CARGO_OSDK_ARGS)
 
 .PHONY: tools

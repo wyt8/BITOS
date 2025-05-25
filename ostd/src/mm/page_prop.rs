@@ -33,6 +33,14 @@ impl PageProperty {
             priv_flags: PrivilegedPageFlags::empty(),
         }
     }
+    /// Creates a page property that implies a page with no access.
+    pub fn new_kernel(flags: PageFlags, cache: CachePolicy) -> Self {
+        Self {
+            flags,
+            cache,
+            priv_flags: PrivilegedPageFlags::empty(),
+        }
+    }
 }
 
 // TODO: Make it more abstract when supporting other architectures.

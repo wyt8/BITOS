@@ -58,9 +58,13 @@ boot_pagetable:
     .quad 0  # To-Be-Assign
 
 boot_pagetable_2nd:
-    # 0x0000_00ff_8000_0000 -> 0x0000_0000_8000_0000
     .zero 8 * 508
+    # 0xffff_ffff_0000_0000 -> 0x0000_0000_0000_0000
     .quad (0x00000 << 10) | 0xcf # VRWXAD
+    # 0xffff_ffff_4000_0000 -> 0x0000_0000_4000_0000
     .quad (0x40000 << 10) | 0xcf # VRWXAD
+    # 0xffff_ffff_8000_0000 -> 0x0000_0000_8000_0000
     .quad (0x80000 << 10) | 0xcf # VRWXAD
+    # 0xffff_ffff_c000_0000 -> 0x0000_0000_c000_0000
+    # .quad (0xc0000 << 10) | 0xcf # VRWXAD
     .quad 0

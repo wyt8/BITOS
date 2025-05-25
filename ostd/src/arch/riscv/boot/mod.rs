@@ -103,6 +103,9 @@ fn parse_initramfs_range() -> Option<(usize, usize)> {
     let chosen = DEVICE_TREE.get().unwrap().find_node("/chosen").unwrap();
     let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;
     let initrd_end = chosen.property("linux,initrd-end")?.as_usize()?;
+    if (initrd_end - initrd_start <= 0) {
+        return None;
+    }
     Some((initrd_start, initrd_end))
 }
 

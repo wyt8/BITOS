@@ -5,7 +5,7 @@
             "name": "Debug Asterinas(#PROFILE#)",
             "type": "lldb",
             "request": "custom",
-            "targetCreateCommands": ["target create ${workspaceFolder}/target/osdk/#CRATE_NAME#/#BIN_NAME#"],
+            "targetCreateCommands": ["target create ${workspaceFolder}/target/osdk/#CRATE_NAME#/#BIN_NAME#.qemu_elf"],
             "processCreateCommands": ["gdb-remote #ADDR_PORT#"]
         }
     ]

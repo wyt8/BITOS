@@ -49,7 +49,8 @@ where
     // Lazy initialization.
     if boot_pt.is_none() {
         // SAFETY: This function is called only once.
-        *boot_pt = Some(unsafe { BootPageTable::from_current_pt() });
+        let bpt = unsafe { BootPageTable::from_current_pt() };
+        *boot_pt = Some(bpt);
     }
 
     let r = f(boot_pt.as_mut().unwrap());
@@ -137,7 +138,7 @@ impl<E: PageTableEntryTrait, C: PagingConstsTrait> BootPageTable<E, C> {
         // Make sure the 2 available bits are not set for firmware page tables.
         dfs_walk_on_leave::<E, C>(root_pt, C::NR_LEVELS, &mut |pte: &mut E| {
             let prop = pte.prop();
-            pte.set_prop(PageProperty::new(
+            pte.set_prop(PageProperty::new_kernel(
                 prop.flags | PTE_POINTS_TO_FIRMWARE_PT,
                 prop.cache,
             ));
@@ -273,7 +274,7 @@ impl<E: PageTableEntryTrait, C: PagingConstsTrait> BootPageTable<E, C> {
 
         let mut pte = E::new_pt(frame_paddr);
         let prop = pte.prop();
-        pte.set_prop(PageProperty::new(prop.flags, prop.cache));
+        pte.set_prop(PageProperty::new_kernel(prop.flags, prop.cache));
 
         pte
     }

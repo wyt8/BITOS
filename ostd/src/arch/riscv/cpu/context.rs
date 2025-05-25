@@ -31,6 +31,7 @@ pub struct CpuExceptionInfo {
     /// The error code associated with the exception.
     pub page_fault_addr: usize,
     pub error_code: usize, // TODO
+    pub instruction: usize,
 }
 
 impl Default for UserContext {
@@ -50,6 +51,7 @@ impl Default for CpuExceptionInfo {
             code: Exception::Unknown,
             page_fault_addr: 0,
             error_code: 0,
+            instruction: 0,
         }
     }
 }
@@ -101,6 +103,22 @@ impl UserContext {
     pub fn activate_tls_pointer(&self) {
         // No-op
     }
+
+    pub fn init_fpu_state(&self) {
+        unsafe {
+        // 获取原始指针
+        let sstatus_ptr = core::ptr::addr_of!(self.user_context.sstatus) as *mut usize;
+
+        // 读取当前值
+        let current = sstatus_ptr.read();
+
+        // 设置 FS 字段为 Dirty
+        let modified = (current & !(0b11 << 13)) | (0b11 << 13);
+
+        // 写回
+        sstatus_ptr.write(modified);
+        }
+    }
 }
 
 impl UserContextApiInternal for UserContext {
@@ -118,12 +136,38 @@ impl UserContextApiInternal for UserContext {
                 }
                 Trap::Exception(e) => {
                     let stval = riscv::register::stval::read();
+                    let sepc = riscv::register::sepc::read();
                     log::trace!("Exception, scause: {e:?}, stval: {stval:#x?}");
-                    self.cpu_exception_info = CpuExceptionInfo {
-                        code: e,
-                        page_fault_addr: stval,
-                        error_code: 0,
-                    };
+                    match e {
+                        // Check if the exception is a page fault
+                        // If so, the address is stored in stval
+                        Exception::StorePageFault
+                        | Exception::LoadPageFault
+                        | Exception::InstructionPageFault => {
+                            self.cpu_exception_info = CpuExceptionInfo {
+                                code: e,
+                                page_fault_addr: stval,
+                                error_code: 0,
+                                instruction: 0,
+                            };
+                        }
+                        Exception::IllegalInstruction => {
+                            self.cpu_exception_info = CpuExceptionInfo {
+                                code: e,
+                                page_fault_addr: sepc,
+                                error_code: 0,
+                                instruction: stval,
+                            };
+                        }
+                        _ => {
+                            self.cpu_exception_info = CpuExceptionInfo {
+                                code: e,
+                                page_fault_addr: 0,
+                                error_code: 0,
+                                instruction: 0,
+                            }
+                        }
+                    }
                     break ReturnReason::UserException;
                 }
             }
@@ -239,12 +283,12 @@ pub struct FpuState;
 impl FpuState {
     /// Saves CPU's current FPU state into this instance.
     pub fn save(&self) {
-        todo!()
+        // todo!()
     }
 
     /// Restores CPU's FPU state from this instance.
     pub fn restore(&self) {
-        todo!()
+        // todo!()
     }
 }
 

@@ -8,9 +8,10 @@ pub mod bus;
 pub mod common_device;
 
 use alloc::vec::Vec;
-use core::ops::Range;
+use core::{ops::Range, ptr::NonNull};
 
-use log::debug;
+use fdt::{node::FdtNode, standard_nodes::Compatible, Fdt};
+use log::{debug, info, warn};
 
 use self::bus::MmioBus;
 use crate::{
@@ -38,6 +39,11 @@ pub(crate) fn init() {
         });
         // FIXME: The address 0xFEB0_0000 is obtained from an instance of microvm, and it may not work in other architecture.
         iter_range(0xFEB0_0000..0xFEB0_4000);
+    }
+    #[cfg(target_arch = "riscv64")]
+    {
+        use crate::arch::boot::DEVICE_TREE;
+        walk_dt(DEVICE_TREE.get().unwrap());
     }
 }
 
@@ -72,5 +78,32 @@ fn iter_range(range: Range<usize>) {
             let device = MmioCommonDevice::new(current, handle);
             lock.register_mmio_device(device);
         }
+    }
+}
+
+fn walk_dt(fdt: &Fdt) {
+    for node in fdt.all_nodes() {
+        if let Some(compatible) = node.compatible() {
+            if compatible.all().any(|s| s == "virtio,mmio") {
+                virtio_probe(node);
+            }
+        }
+    }
+}
+
+fn virtio_probe(node: FdtNode) {
+    if let Some(reg) = node.reg().unwrap().next() {
+        let paddr = reg.starting_address as usize;
+        let size = reg.size.unwrap();
+        info!("walk dt addr={:#x}, size={:#x}", paddr, size);
+        info!(
+            "Device tree node {}: {:?}",
+            node.name,
+            node.compatible().map(Compatible::first),
+        );
+        let mut lock = MMIO_BUS.lock();
+        let handle = IrqLine::alloc().unwrap();
+        let device = MmioCommonDevice::new(paddr, handle);
+        lock.register_mmio_device(device);
     }
 }
