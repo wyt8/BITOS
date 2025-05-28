@@ -198,7 +198,8 @@ $(INITRAMFS_EMPTY_DIRS):
 
 $(INITRAMFS)/bin: $(TMP_DIR)/busybox/_install
 	@mkdir -p $@
-	@cp -P $(TMP_DIR)/busybox/_install/bin/* $@
+	@/bin/busybox --install -s $@
+	@cp $(TMP_DIR)/busybox/_install/bin/busybox $@
 
 $(INITRAMFS)/sbin: $(TMP_DIR)/busybox/_install $(TOOLCHAIN_DIR)/riscv64
 	@cp -r $(TMP_DIR)/busybox/_install/sbin $@
