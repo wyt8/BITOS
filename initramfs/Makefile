@@ -40,21 +40,22 @@ INITRAMFS_EMPTY_DIRS := \
 # 	$(INITRAMFS)/usr/local \
 # 	$(INITRAMFS)/benchmark \
 # 	$(INITRAMFS_EMPTY_DIRS)
-# INITRAMFS_ALL_DIRS := \
-# 	$(INITRAMFS)/etc \
-# 	$(INITRAMFS)/bin \
-# 	$(INITRAMFS)/sbin \
-# 	$(INITRAMFS)/usr/bin \
-# 	$(INITRAMFS)/usr/sbin \
-# 	$(INITRAMFS)/lib/riscv64-linux-gnu \
-# 	$(INITRAMFS)/lib64 \
-# 	$(INITRAMFS)/usr/lib/riscv64-linux-gnu \
-# 	$(INITRAMFS)/usr/lib64 \
-# 	$(INITRAMFS_EMPTY_DIRS)
 INITRAMFS_ALL_DIRS := \
+	$(INITRAMFS)/etc \
 	$(INITRAMFS)/bin \
+	$(INITRAMFS)/sbin \
 	$(INITRAMFS)/usr/bin \
+	$(INITRAMFS)/usr/sbin \
+	$(INITRAMFS)/lib/riscv64-linux-gnu \
+	$(INITRAMFS)/lib64 \
+	$(INITRAMFS)/usr/lib/riscv64-linux-gnu \
+	$(INITRAMFS)/usr/lib64 \
 	$(INITRAMFS_EMPTY_DIRS)
+# INITRAMFS_ALL_DIRS := \
+#  	$(INITRAMFS)/etc \
+# 	$(INITRAMFS)/bin \
+# 	$(INITRAMFS)/usr/bin \
+# 	$(INITRAMFS_EMPTY_DIRS)
 
 # Include test as target if BENCHMARK is not set.
 ifeq ($(BENCHMARK), none)
@@ -163,6 +164,9 @@ clean:
 	@rm -rf $(TMP_DIR)
 	@rm -rf $(TOOLCHAIN_DIR)
 
+.PHONY: test
+test: $(INITRAMFS)/bin
+
 # =========================== ToolChain ===============================
 
 
@@ -187,7 +191,7 @@ $(TMP_DIR)/busybox/_install: $(TMP_DIR)/busybox $(TOOLCHAIN_DIR)/riscv64
 	@# Modify the busybox config file to enable statically linked
 	@sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' $(TMP_DIR)/busybox/.config
 	@make --no-print-directory -C $(TMP_DIR)/busybox CROSS_COMPILE=$(TOOLCHAIN_DIR)/riscv64/bin/riscv64-linux- ARCH=riscv64
-	@make --no-print-directory -C $(TMP_DIR)/busybox install CROSS_COMPILE=$(TOOLCHAIN_DIR)/riscv64/bin/riscv64-linux- ARCH=riscv64
+	@make --no-print-directory -C $(TMP_DIR)/busybox install CROSS_COMPILE=$(TOOLCHAIN_DIR)/riscv64/bin/riscv64-linux- ARCH=riscv64 CFLAGS="-fno-stack-protector"
 
 
 # =========================== InitRamFs ===============================
@@ -198,8 +202,7 @@ $(INITRAMFS_EMPTY_DIRS):
 
 $(INITRAMFS)/bin: $(TMP_DIR)/busybox/_install
 	@mkdir -p $@
-	@/bin/busybox --install -s $@
-	@cp $(TMP_DIR)/busybox/_install/bin/busybox $@
+	@cp -P -r $(TMP_DIR)/busybox/_install/bin/* $@
 
 $(INITRAMFS)/sbin: $(TMP_DIR)/busybox/_install $(TOOLCHAIN_DIR)/riscv64
 	@cp -r $(TMP_DIR)/busybox/_install/sbin $@

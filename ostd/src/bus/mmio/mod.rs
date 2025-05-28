@@ -10,7 +10,6 @@ pub mod common_device;
 use alloc::vec::Vec;
 use core::{ops::Range, ptr::NonNull};
 
-use fdt::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use log::{debug, info, warn};
 
 use self::bus::MmioBus;
@@ -42,8 +41,12 @@ pub(crate) fn init() {
     }
     #[cfg(target_arch = "riscv64")]
     {
-        use crate::arch::boot::DEVICE_TREE;
-        walk_dt(DEVICE_TREE.get().unwrap());
+        use crate::arch::trap::plic::PLIC;
+        let mut lock = MMIO_BUS.lock();
+        for device in crate::arch::bus::mmio::get_mmio_devices() {
+            lock.register_mmio_device(device);
+        }
+        PLIC.get().unwrap().set_threshold(0, true, 0);
     }
 }
 
@@ -78,32 +81,5 @@ fn iter_range(range: Range<usize>) {
             let device = MmioCommonDevice::new(current, handle);
             lock.register_mmio_device(device);
         }
-    }
-}
-
-fn walk_dt(fdt: &Fdt) {
-    for node in fdt.all_nodes() {
-        if let Some(compatible) = node.compatible() {
-            if compatible.all().any(|s| s == "virtio,mmio") {
-                virtio_probe(node);
-            }
-        }
-    }
-}
-
-fn virtio_probe(node: FdtNode) {
-    if let Some(reg) = node.reg().unwrap().next() {
-        let paddr = reg.starting_address as usize;
-        let size = reg.size.unwrap();
-        info!("walk dt addr={:#x}, size={:#x}", paddr, size);
-        info!(
-            "Device tree node {}: {:?}",
-            node.name,
-            node.compatible().map(Compatible::first),
-        );
-        let mut lock = MMIO_BUS.lock();
-        let handle = IrqLine::alloc().unwrap();
-        let device = MmioCommonDevice::new(paddr, handle);
-        lock.register_mmio_device(device);
     }
 }

@@ -67,5 +67,7 @@ qemu.args = """\
     -device virtio-blk-device,drive=x0 \
     -device virtio-keyboard-device \
     -device virtio-serial-device \
+    -chardev socket,id=consock,path=/tmp/console.sock,server,nowait \
     -device virtconsole,chardev=mux \
+    -d guest_errors,int -D qemu.txt \
 """

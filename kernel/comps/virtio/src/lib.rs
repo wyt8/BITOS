@@ -95,6 +95,11 @@ fn pop_device_transport() -> Option<Box<dyn VirtioTransport>> {
 
 fn negotiate_features(transport: &mut Box<dyn VirtioTransport>) {
     let features = transport.read_device_features();
+    log::debug!(
+        "[Virtio]: Device features: 0x{:x}, device type: {:?}",
+        features,
+        transport.device_type()
+    );
     let mask = ((1u64 << 24) - 1) | (((1u64 << 24) - 1) << 50);
     let device_specified_features = features & mask;
     let device_support_features = match transport.device_type() {
@@ -107,8 +112,14 @@ fn negotiate_features(transport: &mut Box<dyn VirtioTransport>) {
     };
     let mut support_feature = Feature::from_bits_truncate(features);
     support_feature.remove(Feature::RING_EVENT_IDX);
+    let write_features = features & (support_feature.bits | device_support_features);
+    log::debug!(
+        "[Virtio]: Write features: 0x{:x}, device type: {:?}",
+        write_features,
+        transport.device_type()
+    );
     transport
-        .write_driver_features(features & (support_feature.bits | device_support_features))
+        .write_driver_features(write_features)
         .unwrap();
 }
 

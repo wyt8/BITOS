@@ -25,6 +25,6 @@ pub use console::_print;
 
 #[init_component]
 fn init() -> Result<(), ComponentInitError> {
-    // aster_logger::init();
+    aster_logger::init();
     Ok(())
 }

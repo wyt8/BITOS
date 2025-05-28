@@ -3,12 +3,15 @@
 //! Handles trap.
 
 mod trap;
+pub mod plic;
 
+use plic::handle_external_interrupt;
+use riscv::register::scause::Interrupt;
 use spin::Once;
 pub use trap::{GeneralRegs, TrapFrame, UserContext};
 
 use super::cpu::context::CpuExceptionInfo;
-use crate::{cpu_local_cell, mm::MAX_USERSPACE_VADDR};
+use crate::{arch::irq::{disable_local, enable_local}, cpu_local_cell, mm::MAX_USERSPACE_VADDR};
 
 cpu_local_cell! {
     static IS_KERNEL_INTERRUPTED: bool = false;
@@ -17,6 +20,7 @@ cpu_local_cell! {
 /// Initialize interrupt handling on RISC-V.
 pub unsafe fn init() {
     self::trap::init();
+    self::plic::init();
 }
 
 /// Returns true if this function is called within the context of an IRQ handler
@@ -32,13 +36,25 @@ extern "C" fn trap_handler(f: &mut TrapFrame) {
     use riscv::register::scause::{Exception, Trap};
 
     match riscv::register::scause::read().cause() {
-        Trap::Interrupt(_) => {
+        Trap::Interrupt(i) => {
             IS_KERNEL_INTERRUPTED.store(true);
-            todo!();
+            disable_local();
+            match i {
+                Interrupt::SupervisorExternal => {
+                    // Handle external interrupt
+                    handle_external_interrupt(f);
+                }
+                _ => {
+                    // Handle other interrupts
+                    panic!("Unhandled interrupt: {i:?}");
+                }
+            }
+            enable_local();
             IS_KERNEL_INTERRUPTED.store(false);
         }
         Trap::Exception(e) => {
             let stval = riscv::register::stval::read();
+            let sepc = riscv::register::sepc::read();
             match e {
                 // Handle page fault
                 Exception::StorePageFault
@@ -57,6 +73,12 @@ extern "C" fn trap_handler(f: &mut TrapFrame) {
                             return;
                         }
                     }
+                }
+                Exception::IllegalInstruction => {
+                    // Handle illegal instruction
+                    let old_sstatus = f.sstatus;
+                    f.sstatus = (old_sstatus & !(0b11 << 13)) | (0b11 << 13);
+                    return;
                 }
                 _ => {}
             }
