@@ -71,3 +71,17 @@ qemu.args = """\
     -device virtconsole,chardev=mux \
     -d guest_errors,int -D qemu.txt \
 """
+
+[scheme."loongarch"]
+boot.method = "qemu-direct"
+build.strip_elf = false
+
+qemu.args = """\
+    -machine virt \
+    -m 8G \
+    -smp 1 \
+    --no-reboot \
+    -nographic \
+    -display none \
+    -rtc base=utc
+"""

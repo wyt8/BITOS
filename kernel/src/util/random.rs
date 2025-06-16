@@ -46,6 +46,8 @@ pub fn init() {
             let seed = chosen.property("rng-seed").unwrap().value.try_into().unwrap();
 
             RNG.call_once(|| SpinLock::new(StdRng::from_seed(seed)));
+        } else if #[cfg(target_arch = "loongarch64")] {
+            panic!("LoongArch64 does not support getrandom yet");
         } else {
             compile_error!("unsupported target");
         }
