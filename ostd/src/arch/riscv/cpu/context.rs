@@ -9,9 +9,12 @@ use riscv::register::scause::{Exception, Interrupt, Trap};
 pub use crate::arch::trap::GeneralRegs as RawGeneralRegs;
 use crate::{
     arch::{
+        kernel::plic::claim_interrupt,
         timer::handle_timer_interrupt,
         trap::{TrapFrame, UserContext as RawUserContext},
     },
+    cpu::current_cpu_racy,
+    trap::call_irq_callback_functions,
     user::{ReturnReason, UserContextApi, UserContextApiInternal},
 };
 
@@ -116,6 +119,13 @@ impl UserContextApiInternal for UserContext {
             match riscv::register::scause::read().cause() {
                 Trap::Interrupt(Interrupt::SupervisorTimer) => {
                     handle_timer_interrupt();
+                }
+                Trap::Interrupt(Interrupt::SupervisorExternal) => {
+                    while let irq_num = claim_interrupt(current_cpu_racy().as_usize())
+                        && irq_num != 0
+                    {
+                        call_irq_callback_functions(&self.as_trap_frame(), irq_num);
+                    }
                 }
                 Trap::Interrupt(_) => todo!(),
                 Trap::Exception(Exception::UserEnvCall) => {

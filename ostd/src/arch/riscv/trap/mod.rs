@@ -9,7 +9,10 @@ use spin::Once;
 pub use trap::{GeneralRegs, TrapFrame, UserContext};
 
 use super::cpu::context::CpuExceptionInfo;
-use crate::cpu_local_cell;
+use crate::{
+    arch::kernel::plic::claim_interrupt, cpu::current_cpu_racy, cpu_local_cell,
+    trap::call_irq_callback_functions,
+};
 
 cpu_local_cell! {
     static IS_KERNEL_INTERRUPTED: bool = false;
@@ -39,7 +42,13 @@ extern "C" fn trap_handler(f: &mut TrapFrame) {
                 Interrupt::SupervisorTimer => {
                     crate::arch::timer::handle_timer_interrupt();
                 }
-                Interrupt::SupervisorExternal => todo!(),
+                Interrupt::SupervisorExternal => {
+                    while let irq_num = claim_interrupt(current_cpu_racy().as_usize())
+                        && irq_num != 0
+                    {
+                        call_irq_callback_functions(f, irq_num);
+                    }
+                }
                 Interrupt::SupervisorSoft => todo!(),
                 _ => {
                     panic!(

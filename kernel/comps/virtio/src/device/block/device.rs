@@ -6,7 +6,8 @@ use alloc::{
     format,
     string::String,
     sync::Arc,
-    vec::{self, Vec},
+    vec,
+    vec::Vec,
 };
 use core::{fmt::Debug, hint::spin_loop, mem::size_of};
 
