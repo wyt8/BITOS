@@ -115,7 +115,7 @@ fn riscv_probe() {
     use ostd::{
         arch::{boot::DEVICE_TREE, kernel::PLIC},
         io::IoMem,
-        trap::IrqLine,
+        trap::irq::IrqLine,
     };
 
     let mut mmio_bus = MMIO_BUS.lock();
