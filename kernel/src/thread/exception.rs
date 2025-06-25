@@ -26,6 +26,7 @@ pub struct PageFaultInfo {
     pub required_perms: VmPerms,
 }
 
+#[cfg(target_arch = "riscv64")]
 pub struct IllegalInstructionFaultInfo {
     /// The virtual address where the illegal instruction occurred.
     pub address: Vaddr,
@@ -34,6 +35,7 @@ pub struct IllegalInstructionFaultInfo {
     pub instruction: usize,
 }
 
+#[cfg(target_arch = "riscv64")]
 impl IllegalInstructionFaultInfo {
     /// Judege if the instruction is a floating point exception.
     pub fn is_floating_point_exception(&self) -> bool {
@@ -55,6 +57,7 @@ pub fn handle_exception(ctx: &Context, context: &UserContext) {
         }
     }
 
+    #[cfg(target_arch = "riscv64")]
     if let Ok(illegal_instruction_info) = IllegalInstructionFaultInfo::try_from(trap_info) {
         if illegal_instruction_info.is_floating_point_exception() {
             warn!(

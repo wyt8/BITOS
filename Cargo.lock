@@ -1093,7 +1093,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c9f0d275c70310e2a9d2fc23250c5ac826a73fa828a5f256401f85c5c554283"
 dependencies = [
  "bit_field",
- "bitflags 2.9.0",
+ "bitflags 2.9.1",
 ]
 
 [[package]]
