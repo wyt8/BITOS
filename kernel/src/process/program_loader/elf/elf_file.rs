@@ -6,7 +6,7 @@ use xmas_elf::{
     program::{self, ProgramHeader64},
 };
 
-use crate::prelude::*;
+use crate::{fs::path::Dentry, prelude::*};
 pub struct Elf {
     pub elf_header: ElfHeader,
     pub program_headers: Vec<ProgramHeader64>,
@@ -90,7 +90,7 @@ impl Elf {
     }
 
     /// read the ldso path from the elf interpret section
-    pub fn ldso_path(&self, file_header_buf: &[u8]) -> Result<Option<String>> {
+    pub fn ldso_path(&self, file_header_buf: &[u8], elf_file: &Dentry) -> Result<Option<String>> {
         for program_header in &self.program_headers {
             let type_ = program_header.get_type().map_err(|_| {
                 Error::with_message(Errno::ENOEXEC, "parse program header type fails")
@@ -98,11 +98,19 @@ impl Elf {
             if type_ == program::Type::Interp {
                 let file_size = program_header.file_size as usize;
                 let file_offset = program_header.offset as usize;
-                debug_assert!(file_offset + file_size <= file_header_buf.len());
-                let ldso = CStr::from_bytes_with_nul(
-                    &file_header_buf[file_offset..file_offset + file_size],
-                )?;
-                return Ok(Some(ldso.to_string_lossy().to_string()));
+                let ldso_str = if file_offset + file_size <= file_header_buf.len() {
+                    let cstr = CStr::from_bytes_with_nul(
+                        &file_header_buf[file_offset..file_offset + file_size],
+                    )?;
+                    cstr.to_string_lossy().to_string()
+                } else {
+                    let mut buffer = vec![0u8; file_size];
+                    elf_file.inode().read_bytes_at(file_offset, &mut buffer)?;
+                    let cstr = CStr::from_bytes_with_nul(&buffer)?;
+                    cstr.to_string_lossy().to_string()
+                };
+
+                return Ok(Some(ldso_str));
             }
         }
         Ok(None)

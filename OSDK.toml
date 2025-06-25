@@ -18,11 +18,11 @@ kcmd_args = [
     "LOGNAME=root",
     "HOME=/",
     "USER=root",
-    "PATH=/bin:/benchmark",
-    "init=/usr/bin/busybox",
+    "PATH=/bin",
+    "init=/bin/busybox",
 ]
 init_args = ["sh", "-l"]
-initramfs = "test/build/initramfs.cpio.gz"
+initramfs = "initramfs/build/initramfs.cpio"
 
 # Special options for testing
 [test.qemu]
@@ -60,8 +60,8 @@ qemu.args = """\
     -serial chardev:mux \
     -monitor chardev:mux \
     -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
-    -drive if=none,format=raw,id=x0,file=./test/build/ext2.img \
-    -drive if=none,format=raw,id=x1,file=./test/build/exfat.img \
+    -drive if=none,format=raw,id=x1,file=./sdcard-rv.img \
+    -drive if=none,format=raw,id=x0,file=./disk.img \
     -device virtio-blk-device,drive=x0 \
     -device virtio-keyboard-device \
     -device virtio-serial-device \

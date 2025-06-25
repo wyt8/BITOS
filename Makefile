@@ -3,19 +3,19 @@
 # =========================== Makefile options. ===============================
 
 # Global build options.
-ARCH ?= x86_64
+ARCH ?= riscv64
 BENCHMARK ?= none
 BOOT_METHOD ?= grub-rescue-iso
 BOOT_PROTOCOL ?= multiboot2
 BUILD_SYSCALL_TEST ?= 0
-ENABLE_KVM ?= 1
+ENABLE_KVM ?= 0
 INTEL_TDX ?= 0
 MEM ?= 8G
 OVMF ?= on
 RELEASE ?= 0
 RELEASE_LTO ?= 0
 LOG_LEVEL ?= error
-SCHEME ?= ""
+SCHEME ?= "riscv"
 SMP ?= 1
 OSTD_TASK_STACK_SIZE_IN_PAGES ?= 64
 FEATURES ?=
@@ -223,7 +223,7 @@ test_osdk:
 
 .PHONY: initramfs
 initramfs:
-	@$(MAKE) --no-print-directory -C test
+	@$(MAKE) --no-print-directory -C initramfs
 
 .PHONY: build
 build: initramfs $(CARGO_OSDK)

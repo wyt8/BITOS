@@ -98,6 +98,7 @@ pub fn init() {
     fs::rootfs::init(boot_info().initramfs.expect("No initramfs found!")).unwrap();
     device::init().unwrap();
     syscall::init();
+    #[cfg(target_arch = "x86_64")]
     vdso::init();
     process::init();
 }

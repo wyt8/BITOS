@@ -106,10 +106,25 @@ fn parse_initramfs_range() -> Option<(usize, usize)> {
     Some((initrd_start, initrd_end))
 }
 
+fn clear_bss() {
+    unsafe extern "C" {
+        unsafe fn __bss();
+        unsafe fn __bss_end();
+    }
+
+    let bss_ptr = __bss as *mut u8;
+    let bss_len = __bss_end as usize - __bss as usize;
+    unsafe {
+        core::slice::from_raw_parts_mut(bss_ptr, bss_len).fill(0);
+    }
+}
+
 /// The entry point of the Rust code portion of Asterinas.
 #[no_mangle]
 pub extern "C" fn riscv_boot(_hart_id: usize, device_tree_paddr: usize) -> ! {
     early_println!("Enter riscv_boot");
+
+    clear_bss();
 
     let device_tree_ptr = paddr_to_vaddr(device_tree_paddr) as *const u8;
     let fdt = unsafe { fdt::Fdt::from_ptr(device_tree_ptr).unwrap() };

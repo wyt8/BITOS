@@ -48,7 +48,7 @@ pub fn load_elf_to_vm(
 ) -> Result<ElfLoadInfo> {
     let parsed_elf = Elf::parse_elf(file_header)?;
 
-    let ldso = lookup_and_parse_ldso(&parsed_elf, file_header, fs_resolver)?;
+    let ldso = lookup_and_parse_ldso(&parsed_elf, file_header, fs_resolver, &elf_file)?;
 
     match init_and_map_vmos(process_vm, ldso, &parsed_elf, &elf_file) {
         Ok((entry_point, mut aux_vec)) => {
@@ -92,9 +92,10 @@ fn lookup_and_parse_ldso(
     elf: &Elf,
     file_header: &[u8],
     fs_resolver: &FsResolver,
+    elf_file: &Dentry
 ) -> Result<Option<(Dentry, Elf)>> {
     let ldso_file = {
-        let Some(ldso_path) = elf.ldso_path(file_header)? else {
+        let Some(ldso_path) = elf.ldso_path(file_header, elf_file)? else {
             return Ok(None);
         };
         let fs_path = FsPath::new(AT_FDCWD, &ldso_path)?;
