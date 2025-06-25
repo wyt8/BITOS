@@ -302,7 +302,7 @@ macro_rules! impl_syscall_nums_and_dispatch_fn {
                     }
                 )*
                 _ => {
-                    log::warn!("Unimplemented syscall number: {}", syscall_number);
+                    log::error!("Unimplemented syscall number: {}", syscall_number);
                     $crate::return_errno_with_message!($crate::error::Errno::ENOSYS, "Syscall was unimplemented");
                 }
             }

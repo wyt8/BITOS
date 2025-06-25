@@ -18,6 +18,6 @@ pub use extension::{has_extensions, IsaExtensions};
 /// mode ([`crate::task::atomic_mode`]).
 #[track_caller]
 pub fn sleep_for_interrupt() {
-    crate::task::atomic_mode::might_sleep();
-    riscv::asm::wfi();
+    // crate::task::atomic_mode::might_sleep();
+    // riscv::asm::wfi();
 }

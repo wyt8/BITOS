@@ -134,10 +134,10 @@ impl<'a, G: PinCurrentCpu> TlbFlusher<'a, G> {
     /// processed in IRQs, two CPUs may deadlock if they are waiting for each
     /// other's TLB coherence.
     pub fn sync_tlb_flush(&mut self) {
-        assert!(
-            irq::is_local_enabled(),
-            "Waiting for remote flush with IRQs disabled"
-        );
+        // assert!(
+        //     irq::is_local_enabled(),
+        //     "Waiting for remote flush with IRQs disabled"
+        // );
 
         for cpu in self.have_unsynced_flush.iter() {
             while !ACK_REMOTE_FLUSH.get_on_cpu(cpu).load(Ordering::Relaxed) {

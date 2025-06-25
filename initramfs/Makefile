@@ -28,9 +28,7 @@ INITRAMFS_EMPTY_DIRS := \
 	$(INITRAMFS)/dev \
 	$(INITRAMFS)/sys \
 	$(INITRAMFS)/ext2 \
-	$(INITRAMFS)/exfat \
-	$(INITRAMFS)/ext4x0 \
-	$(INITRAMFS)/ext4x1
+	$(INITRAMFS)/ext4 \
 # INITRAMFS_ALL_DIRS := \
 # 	$(INITRAMFS)/etc \
 # 	$(INITRAMFS)/lib/x86_64-linux-gnu \
@@ -53,7 +51,6 @@ INITRAMFS_EMPTY_DIRS := \
 # 	$(INITRAMFS)/usr/lib64 \
 # 	$(INITRAMFS_EMPTY_DIRS)
 INITRAMFS_ALL_DIRS := \
- 	$(INITRAMFS)/etc \
 	$(INITRAMFS)/bin \
 	$(INITRAMFS)/sbin \
 	$(INITRAMFS)/usr/bin \
@@ -143,16 +140,22 @@ $(INITRAMFS_FILELIST): | $(INITRAMFS_ALL_DIRS)
 endif
 	@(cd $(INITRAMFS); find . -printf "%T@ %p\n") > $(INITRAMFS_FILELIST)
 
-$(EXT2_IMAGE):
-	@dd if=/dev/zero of=$(EXT2_IMAGE) bs=2G count=1
-	@mke2fs $(EXT2_IMAGE)
+$(EXT2_IMAGE): $(INITRAMFS_FILELIST)
+	@dd if=/dev/zero of=$(EXT2_IMAGE) bs=1M count=200
+	@mke2fs -F $(EXT2_IMAGE)
+	@sudo mkdir -p build/ext2
+	@sudo mount -o loop $(EXT2_IMAGE) build/ext2
+	@sudo cp -ar $(INITRAMFS)/* build/ext2/
+	@sudo umount build/ext2
+	# @rm -rf build/ext2
 
 $(EXFAT_IMAGE):
 	@fallocate -l 64M $(EXFAT_IMAGE)
 	@mkfs.exfat $(EXFAT_IMAGE)
 
 .PHONY: build
-build: $(INITRAMFS_IMAGE) $(EXT2_IMAGE)
+build: $(EXT2_IMAGE)
+# build: $(INITRAMFS_IMAGE) $(EXT2_IMAGE)
 # build: $(INITRAMFS_IMAGE) $(EXT2_IMAGE) $(EXFAT_IMAGE)
 
 .PHONY: format
@@ -203,7 +206,7 @@ $(TMP_DIR)/busybox/_install: $(TMP_DIR)/busybox $(TOOLCHAIN_DIR)/riscv64
 
 # Make necessary directories.
 $(INITRAMFS_EMPTY_DIRS):
-	@mkdir -p $@
+	@sudo mkdir -p $@
 
 $(INITRAMFS)/bin: $(TMP_DIR)/busybox/_install
 	@mkdir -p $@
@@ -212,7 +215,7 @@ $(INITRAMFS)/bin: $(TMP_DIR)/busybox/_install
 
 $(INITRAMFS)/sbin: $(TMP_DIR)/busybox/_install $(TOOLCHAIN_DIR)/riscv64
 	@cp -r $(TMP_DIR)/busybox/_install/sbin $@
-	@cp -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/sbin/* $@
+	# @cp -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/sbin/* $@
 	@sudo chown -R root:root $(INITRAMFS)/sbin
 
 $(INITRAMFS)/usr/bin: $(TMP_DIR)/busybox/_install $(TOOLCHAIN_DIR)/riscv64

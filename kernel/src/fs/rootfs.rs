@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use core2::io::{Cursor, Read};
-use cpio_decoder::{CpioDecoder, FileType};
-use lending_iterator::LendingIterator;
-use libflate::gzip::Decoder as GZipDecoder;
+// use core2::io::{Cursor, Read};
+// use cpio_decoder::{CpioDecoder, FileType};
+// use lending_iterator::LendingIterator;
+// use libflate::gzip::Decoder as GZipDecoder;
 use spin::Once;
 
 use super::{
@@ -14,100 +14,162 @@ use super::{
     sysfs::{init as sysfs_init, singleton as sysfs_singleton},
     utils::{FileSystem, InodeMode, InodeType},
 };
-use crate::{fs::path::is_dot, prelude::*};
+use crate::{fs::path::{is_dot, Dentry}, prelude::*, process::{Gid, Uid}};
 
-struct BoxedReader<'a>(Box<dyn Read + 'a>);
+// struct BoxedReader<'a>(Box<dyn Read + 'a>);
 
-impl<'a> BoxedReader<'a> {
-    pub fn new(reader: Box<dyn Read + 'a>) -> Self {
-        BoxedReader(reader)
-    }
+// impl<'a> BoxedReader<'a> {
+//     pub fn new(reader: Box<dyn Read + 'a>) -> Self {
+//         BoxedReader(reader)
+//     }
+// }
+
+// impl Read for BoxedReader<'_> {
+//     fn read(&mut self, buf: &mut [u8]) -> core2::io::Result<usize> {
+//         self.0.read(buf)
+//     }
+// }
+
+// /// Unpack and prepare the rootfs from the initramfs CPIO buffer.
+// pub fn init(initramfs_buf: &[u8]) -> Result<()> {
+//     init_root_mount();
+//     procfs::init();
+
+//     let reader = {
+//         let mut initramfs_suffix = "";
+//         let reader = match &initramfs_buf[..4] {
+//             // Gzip magic number: 0x1F 0x8B
+//             &[0x1F, 0x8B, _, _] => {
+//                 initramfs_suffix = ".gz";
+//                 let gzip_decoder = GZipDecoder::new(initramfs_buf)
+//                     .map_err(|_| Error::with_message(Errno::EINVAL, "invalid gzip buffer"))?;
+//                 BoxedReader::new(Box::new(gzip_decoder))
+//             }
+//             _ => BoxedReader::new(Box::new(Cursor::new(initramfs_buf))),
+//         };
+
+//         println!(
+//             "[kernel] unpacking the initramfs.cpio{} to rootfs ...",
+//             initramfs_suffix
+//         );
+
+//         reader
+//     };
+//     let mut decoder = CpioDecoder::new(reader);
+//     let fs = FsResolver::new();
+
+//     loop {
+//         let Some(entry_result) = decoder.next() else {
+//             break;
+//         };
+
+//         let mut entry = entry_result?;
+
+//         // Make sure the name is a relative path, and is not end with "/".
+//         let entry_name = entry.name().trim_start_matches('/').trim_end_matches('/');
+//         if entry_name.is_empty() {
+//             return_errno_with_message!(Errno::EINVAL, "invalid entry name");
+//         }
+//         if is_dot(entry_name) {
+//             continue;
+//         }
+
+//         // Here we assume that the directory referred by "prefix" must has been created.
+//         // The basis of this assumption is：
+//         // The mkinitramfs script uses `find` command to ensure that the entries are
+//         // sorted that a directory always appears before its child directories and files.
+//         let (parent, name) = if let Some((prefix, last)) = entry_name.rsplit_once('/') {
+//             (fs.lookup(&FsPath::try_from(prefix)?)?, last)
+//         } else {
+//             (fs.root().clone(), entry_name)
+//         };
+
+//         let metadata = entry.metadata();
+//         let mode = InodeMode::from_bits_truncate(metadata.permission_mode());
+//         match metadata.file_type() {
+//             FileType::File => {
+//                 let dentry = parent.new_fs_child(name, InodeType::File, mode)?;
+//                 entry.read_all(dentry.inode().writer(0))?;
+//             }
+//             FileType::Dir => {
+//                 let _ = parent.new_fs_child(name, InodeType::Dir, mode)?;
+//             }
+//             FileType::Link => {
+//                 let dentry = parent.new_fs_child(name, InodeType::SymLink, mode)?;
+//                 let link_content = {
+//                     let mut link_data: Vec<u8> = Vec::new();
+//                     entry.read_all(&mut link_data)?;
+//                     core::str::from_utf8(&link_data)?.to_string()
+//                 };
+//                 dentry.inode().write_link(&link_content)?;
+//             }
+//             type_ => {
+//                 panic!("unsupported file type = {:?} in initramfs", type_);
+//             }
+//         }
+//     }
+//     // Mount ProcFS
+//     let proc_dentry = fs.lookup(&FsPath::try_from("/proc")?)?;
+//     proc_dentry.mount(ProcFS::new())?;
+//     // Mount DevFS
+//     let dev_dentry = fs.lookup(&FsPath::try_from("/dev")?)?;
+//     dev_dentry.mount(RamFS::new())?;
+//     // Mount SysFS
+//     let sys_dentry = fs.lookup(&FsPath::try_from("/sys")?)?;
+//     sysfs_init();
+//     let sysfs: Arc<dyn FileSystem> = sysfs_singleton().clone();
+//     sys_dentry.mount(sysfs)?;
+//     println!("[kernel] rootfs is ready");
+
+//     Ok(())
+// }
+
+pub fn make_root_level_dir(single_path: &str) -> Dentry {
+    let fs = FsResolver::new();
+    let dir = fs.root()
+        .clone()
+        .new_fs_child(single_path, InodeType::Dir, InodeMode::from_bits_truncate(0o777))
+        .unwrap();
+    dir.set_owner(Uid::new_root());
+    dir.set_group(Gid::new_root());
+    dir
 }
 
-impl Read for BoxedReader<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> core2::io::Result<usize> {
-        self.0.read(buf)
-    }
-}
-
-/// Unpack and prepare the rootfs from the initramfs CPIO buffer.
-pub fn init(initramfs_buf: &[u8]) -> Result<()> {
+pub fn init(embeded_data: [Option<&'static [u8]>; 10]) -> Result<()> {
     init_root_mount();
     procfs::init();
 
-    let reader = {
-        let mut initramfs_suffix = "";
-        let reader = match &initramfs_buf[..4] {
-            // Gzip magic number: 0x1F 0x8B
-            &[0x1F, 0x8B, _, _] => {
-                initramfs_suffix = ".gz";
-                let gzip_decoder = GZipDecoder::new(initramfs_buf)
-                    .map_err(|_| Error::with_message(Errno::EINVAL, "invalid gzip buffer"))?;
-                BoxedReader::new(Box::new(gzip_decoder))
-            }
-            _ => BoxedReader::new(Box::new(Cursor::new(initramfs_buf))),
-        };
-
-        println!(
-            "[kernel] unpacking the initramfs.cpio{} to rootfs ...",
-            initramfs_suffix
-        );
-
-        reader
-    };
-    let mut decoder = CpioDecoder::new(reader);
     let fs = FsResolver::new();
 
-    loop {
-        let Some(entry_result) = decoder.next() else {
-            break;
-        };
+    let bin_dir = make_root_level_dir("bin");
+    let busybox_file = bin_dir
+        .new_fs_child(
+            "busybox",
+            InodeType::File,
+            InodeMode::from_bits_truncate(0o777),
+        )
+        .unwrap();
+    busybox_file.set_owner(Uid::new_root());
+    busybox_file.set_group(Gid::new_root());
+    busybox_file.inode().write_bytes_direct_at(0, embeded_data[0].unwrap());
+    let root_dir = make_root_level_dir("root");
 
-        let mut entry = entry_result?;
+    let test_file = root_dir
+        .new_fs_child(
+            "test.sh",
+            InodeType::File,
+            InodeMode::from_bits_truncate(0o777),
+        )
+        .unwrap();
+    test_file.set_owner(Uid::new_root());
+    test_file.set_group(Gid::new_root());
+    test_file.inode().write_bytes_direct_at(0, embeded_data[1].unwrap());
 
-        // Make sure the name is a relative path, and is not end with "/".
-        let entry_name = entry.name().trim_start_matches('/').trim_end_matches('/');
-        if entry_name.is_empty() {
-            return_errno_with_message!(Errno::EINVAL, "invalid entry name");
-        }
-        if is_dot(entry_name) {
-            continue;
-        }
+    make_root_level_dir("proc");
+    make_root_level_dir("dev");
+    make_root_level_dir("sys");
+    make_root_level_dir("ext4");
 
-        // Here we assume that the directory referred by "prefix" must has been created.
-        // The basis of this assumption is：
-        // The mkinitramfs script uses `find` command to ensure that the entries are
-        // sorted that a directory always appears before its child directories and files.
-        let (parent, name) = if let Some((prefix, last)) = entry_name.rsplit_once('/') {
-            (fs.lookup(&FsPath::try_from(prefix)?)?, last)
-        } else {
-            (fs.root().clone(), entry_name)
-        };
-
-        let metadata = entry.metadata();
-        let mode = InodeMode::from_bits_truncate(metadata.permission_mode());
-        match metadata.file_type() {
-            FileType::File => {
-                let dentry = parent.new_fs_child(name, InodeType::File, mode)?;
-                entry.read_all(dentry.inode().writer(0))?;
-            }
-            FileType::Dir => {
-                let _ = parent.new_fs_child(name, InodeType::Dir, mode)?;
-            }
-            FileType::Link => {
-                let dentry = parent.new_fs_child(name, InodeType::SymLink, mode)?;
-                let link_content = {
-                    let mut link_data: Vec<u8> = Vec::new();
-                    entry.read_all(&mut link_data)?;
-                    core::str::from_utf8(&link_data)?.to_string()
-                };
-                dentry.inode().write_link(&link_content)?;
-            }
-            type_ => {
-                panic!("unsupported file type = {:?} in initramfs", type_);
-            }
-        }
-    }
     // Mount ProcFS
     let proc_dentry = fs.lookup(&FsPath::try_from("/proc")?)?;
     proc_dentry.mount(ProcFS::new())?;

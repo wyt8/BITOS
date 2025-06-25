@@ -44,6 +44,7 @@ pub(super) fn init() {
             FileSystemType::new("ramfs", true),
             FileSystemType::new("devpts", true),
             FileSystemType::new("ext2", false),
+            FileSystemType::new("ext4", false),
             FileSystemType::new("exfat", false),
         ]
     });

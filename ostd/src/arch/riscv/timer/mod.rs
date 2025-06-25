@@ -62,7 +62,7 @@ pub(super) unsafe fn init() {
     // and we ensure that only the timer interrupt bit is set without affecting
     // other interrupt sources.
     unsafe {
-        riscv::register::sie::set_stimer();
+        // riscv::register::sie::set_stimer();
     }
 }
 

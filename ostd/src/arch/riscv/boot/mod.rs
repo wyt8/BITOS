@@ -5,10 +5,8 @@
 pub mod smp;
 
 use core::arch::global_asm;
-
 use fdt::Fdt;
 use spin::Once;
-
 use crate::{
     boot::{
         memory_region::{MemoryRegion, MemoryRegionArray, MemoryRegionType},
@@ -32,13 +30,17 @@ fn parse_kernel_commandline() -> &'static str {
 }
 
 fn parse_initramfs() -> Option<&'static [u8]> {
-    let Some((start, end)) = parse_initramfs_range() else {
-        return None;
-    };
+    const BUSYBOX_BIN: &[u8] =
+        include_bytes!("../../../../../initramfs/tmp/busybox/_install/bin/busybox");
+    Some(BUSYBOX_BIN)
+    // let Some((start, end)) = parse_initramfs_range() else {
+    //     return None;
+    // };
 
-    let base_va = paddr_to_vaddr(start);
-    let length = end - start;
-    Some(unsafe { core::slice::from_raw_parts(base_va as *const u8, length) })
+    // let base_va = paddr_to_vaddr(start);
+    // let length = end - start;
+
+    // Some(unsafe { core::slice::from_raw_parts(base_va as *const u8, length) })
 }
 
 fn parse_acpi_arg() -> BootloaderAcpiArg {
@@ -106,6 +108,16 @@ fn parse_initramfs_range() -> Option<(usize, usize)> {
     Some((initrd_start, initrd_end))
 }
 
+fn parse_embeded_data() -> [Option<&'static [u8]>; 10] {
+    let mut array = [None; 10];
+    const BUSYBOX_BIN: &[u8] =
+        include_bytes!("../../../../../initramfs/tmp/busybox/_install/bin/busybox");
+    array[0] = Some(BUSYBOX_BIN);
+    const TEST_SCRIPT: &[u8] = include_bytes!("../../../../../initramfs/test.sh");
+    array[1] = Some(TEST_SCRIPT);
+    array
+}
+
 fn clear_bss() {
     unsafe extern "C" {
         unsafe fn __bss();
@@ -139,6 +151,7 @@ pub extern "C" fn riscv_boot(_hart_id: usize, device_tree_paddr: usize) -> ! {
         acpi_arg: parse_acpi_arg(),
         framebuffer_arg: parse_framebuffer_info(),
         memory_regions: parse_memory_regions(),
+        embeded_data: parse_embeded_data(),
     });
 
     call_ostd_main();

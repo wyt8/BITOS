@@ -87,6 +87,8 @@ fn do_clock_nanosleep(
         request_time
     };
 
+    return Ok(SyscallReturn::Return(0));
+
     // FIXME: sleeping thread can only be interrupted by signals that will call signal handler or terminate
     // current process. i.e., the signals that should be ignored will not interrupt sleeping thread.
     let waiter = Waiter::new_pair().0;

@@ -21,7 +21,7 @@ kcmd_args = [
     "PATH=/bin",
     "init=/bin/busybox",
 ]
-init_args = ["sh", "-l"]
+init_args = ["sh", "/root/test.sh"]
 initramfs = "initramfs/build/initramfs.cpio"
 
 # Special options for testing
@@ -53,15 +53,14 @@ build.strip_elf = false
 qemu.args = """\
     -cpu rv64,zba=true,zbb=true \
     -machine virt \
-    -m 8G \
+    -m 2G \
     --no-reboot \
     -nographic \
     -display none \
     -serial chardev:mux \
     -monitor chardev:mux \
     -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
-    -drive if=none,format=raw,id=x1,file=./sdcard-rv.img \
-    -drive if=none,format=raw,id=x0,file=./disk.img \
+    -drive if=none,format=raw,id=x0,file=./sdcard-rv.img \
     -device virtio-blk-device,drive=x0 \
     -device virtio-keyboard-device \
     -device virtio-serial-device \

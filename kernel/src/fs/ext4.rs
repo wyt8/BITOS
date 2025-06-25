@@ -299,9 +299,14 @@ impl Inode for Ext4Inode {
 
         self.fs().inner.read(self.ino() as _, offset, &mut read_buf);
 
-        for i in 0..read_len {
-            writer.write_val(&read_buf[i]);
-        }
+        let mut reader = VmReader::from(read_buf.as_slice());
+
+        writer.write(&mut reader);
+
+        
+        // for i in 0..read_len {
+        //     writer.write_val(&read_buf[i]);
+        // }
 
         self.set_atime(now());
 

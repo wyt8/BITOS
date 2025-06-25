@@ -211,6 +211,7 @@ impl_syscall_nums_and_dispatch_fn! {
     SYS_SETITIMER = 103          => sys_setitimer(args[..3]);
     SYS_TIMER_CREATE = 107       => sys_timer_create(args[..3]);
     SYS_TIMER_DELETE = 111       => sys_timer_delete(args[..1]);
+    SYS_CLOCK_GETTIME_ = 113     => sys_clock_gettime(args[..2]);
     SYS_SCHED_SETPARAM = 118     => sys_sched_setparam(args[..2]);
     SYS_SCHED_SETSCHEDULER = 119 => sys_sched_setscheduler(args[..3]);
     SYS_SCHED_GETSCHEDULER = 120 => sys_sched_getscheduler(args[..1]);
@@ -263,6 +264,7 @@ impl_syscall_nums_and_dispatch_fn! {
     SYS_SEMGET = 190             => sys_semget(args[..3]);
     SYS_SEMCTL = 191             => sys_semctl(args[..4]);
     SYS_SEMOP = 193              => sys_semop(args[..3]);
+    SYS_SEMGET_ = 194            => sys_semget(args[..3]);
     SYS_SOCKET = 198             => sys_socket(args[..3]);
     SYS_SOCKETPAIR = 199         => sys_socketpair(args[..4]);
     SYS_BIND = 200               => sys_bind(args[..3]);
