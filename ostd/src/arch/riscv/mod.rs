@@ -5,19 +5,21 @@
 pub mod boot;
 pub(crate) mod cpu;
 pub mod device;
-pub mod iommu;
+mod io;
+pub(crate) mod iommu;
 pub(crate) mod irq;
+pub mod kernel;
 pub(crate) mod mm;
 pub(crate) mod pci;
 pub mod qemu;
-pub mod serial;
-pub mod task;
+pub(crate) mod serial;
+pub(crate) mod task;
 pub mod timer;
 pub mod trap;
 pub mod io;
 pub mod bus;
 
-use core::sync::atomic::Ordering;
+use crate::cpu::current_cpu_racy;
 
 #[cfg(feature = "cvm_guest")]
 pub(crate) fn init_cvm_guest() {
@@ -27,12 +29,23 @@ pub(crate) fn init_cvm_guest() {
 pub(crate) unsafe fn late_init_on_bsp() {
     // SAFETY: This function is called in the boot context of the BSP.
     unsafe { trap::init() };
-    irq::init();
+
+    let io_mem_builder = io::construct_io_mem_allocator_builder();
 
     // SAFETY: We're on the BSP and we're ready to boot all APs.
     unsafe { crate::boot::smp::boot_all_aps() };
 
-    timer::init();
+    kernel::plic::init(&io_mem_builder);
+
+    // SAFETY:
+    // 1. All the system device memory have been removed from the builder.
+    // 2. RISC-V platforms does not have port I/O.
+    unsafe { crate::io::init(io_mem_builder) };
+
+    // SAFETY: This function is called once and at most once at a proper timing
+    // in the boot context of the BSP, with no timer-related operations having
+    // been performed.
+    unsafe { timer::init() };
     let _ = pci::init();
 }
 
@@ -41,12 +54,12 @@ pub(crate) unsafe fn init_on_ap() {
 }
 
 pub(crate) fn interrupts_ack(irq_number: usize) {
-    unimplemented!()
+    kernel::plic::complete_interrupt(current_cpu_racy().as_usize(), irq_number);
 }
 
 /// Return the frequency of TSC. The unit is Hz.
 pub fn tsc_freq() -> u64 {
-    timer::TIMEBASE_FREQ.load(Ordering::Relaxed)
+    timer::get_timebase_freq()
 }
 
 /// Reads the current value of the processor’s time-stamp counter (TSC).
@@ -63,6 +76,7 @@ pub fn read_random() -> Option<u64> {
 }
 
 pub(crate) fn enable_cpu_features() {
+    cpu::extension::init();
     unsafe {
         // We adopt a lazy approach to enable the floating-point unit; it's not
         // enabled before the first FPU trap.

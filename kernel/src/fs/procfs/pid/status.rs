@@ -9,6 +9,7 @@ use crate::{
     },
     prelude::*,
     process::posix_thread::AsPosixThread,
+    vm::vmar::RssType,
     Process,
 };
 
@@ -97,6 +98,19 @@ impl FileOps for StatusFileOps {
             process.tasks().lock().as_slice().len()
         )
         .unwrap();
+
+        if let Some(vmar_ref) = process.lock_root_vmar().as_ref() {
+            let anon = vmar_ref.get_rss_counter(RssType::RSS_ANONPAGES) * (PAGE_SIZE / 1024);
+            let file = vmar_ref.get_rss_counter(RssType::RSS_FILEPAGES) * (PAGE_SIZE / 1024);
+            let rss = anon + file;
+            writeln!(
+                status_output,
+                "VmRSS:\t{} kB\nRssAnon:\t{} kB\nRssFile:\t{} kB",
+                rss, anon, file
+            )
+            .unwrap();
+        }
+
         Ok(status_output.into_bytes())
     }
 }

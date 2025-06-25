@@ -465,6 +465,10 @@ pub(crate) unsafe fn init() -> Segment<MetaPageMeta> {
         max_paddr
     );
 
+    // In the riscv arch, the boot page table
+    // has mapped the 512GB memory, so don't need
+    // to add temp linear mappping.
+    #[cfg(target_arch = "x86_64")]
     add_temp_linear_mapping(max_paddr);
 
     let tot_nr_frames = max_paddr / page_size::<PagingConsts>(1);
@@ -550,10 +554,15 @@ fn alloc_meta_frames(tot_nr_frames: usize) -> (usize, Paddr) {
     (nr_meta_pages, start_paddr)
 }
 
-/// The metadata of physical pages that cannot be allocated for general use.
+/// Unusable memory metadata. Cannot be used for any purposes.
 #[derive(Debug)]
 pub struct UnusableMemoryMeta;
 impl_frame_meta_for!(UnusableMemoryMeta);
+
+/// Reserved memory metadata. Maybe later used as I/O memory.
+#[derive(Debug)]
+pub struct ReservedMemoryMeta;
+impl_frame_meta_for!(ReservedMemoryMeta);
 
 /// The metadata of physical pages that contains the kernel itself.
 #[derive(Debug, Default)]
@@ -580,18 +589,19 @@ fn mark_unusable_ranges() {
     {
         match region.typ() {
             MemoryRegionType::BadMemory => mark_ranges!(region, UnusableMemoryMeta),
-            MemoryRegionType::Unknown => mark_ranges!(region, UnusableMemoryMeta),
+            MemoryRegionType::Unknown => mark_ranges!(region, ReservedMemoryMeta),
             MemoryRegionType::NonVolatileSleep => mark_ranges!(region, UnusableMemoryMeta),
-            MemoryRegionType::Reserved => mark_ranges!(region, UnusableMemoryMeta),
+            MemoryRegionType::Reserved => mark_ranges!(region, ReservedMemoryMeta),
             MemoryRegionType::Kernel => mark_ranges!(region, KernelMeta),
             MemoryRegionType::Module => mark_ranges!(region, UnusableMemoryMeta),
-            MemoryRegionType::Framebuffer => mark_ranges!(region, UnusableMemoryMeta),
+            MemoryRegionType::Framebuffer => mark_ranges!(region, ReservedMemoryMeta),
             MemoryRegionType::Reclaimable => mark_ranges!(region, UnusableMemoryMeta),
             MemoryRegionType::Usable => {} // By default it is initialized as usable.
         }
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 /// Adds a temporary linear mapping for the metadata frames.
 ///
 /// We only assume boot page table to contain 4G linear mapping. Thus if the

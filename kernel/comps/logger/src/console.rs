@@ -40,13 +40,10 @@ pub fn _print(args: fmt::Arguments) {
         }
     }
 
-    // If there is no console device, print to early print.
-    // if devices.is_empty() {
-    //     EarlyPrinter.write_fmt(args).unwrap();
-    //     return;
-    // }
-
-    // EarlyPrinter.write_fmt(args).unwrap();
+    if devices.is_empty() {
+        EarlyPrinter.write_fmt(args).unwrap();
+        return;
+    }
 
     Printer(devices).write_fmt(args).unwrap();
 }

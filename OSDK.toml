@@ -18,16 +18,13 @@ kcmd_args = [
     "LOGNAME=root",
     "HOME=/",
     "USER=root",
-    "PATH=/bin:/benchmark",
+    "PATH=/bin",
     "init=/bin/busybox",
 ]
 init_args = ["sh", "-l"]
 initramfs = "initramfs/build/initramfs.cpio"
 
 # Special options for testing
-[test.boot]
-method = "qemu-direct"
-
 [test.qemu]
 args = "$(./tools/qemu_args.sh test)"
 
@@ -63,7 +60,8 @@ qemu.args = """\
     -serial chardev:mux \
     -monitor chardev:mux \
     -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
-    -drive if=none,format=raw,id=x0,file=./initramfs/build/ext2.img \
+    -drive if=none,format=raw,id=x1,file=./sdcard-rv.img \
+    -drive if=none,format=raw,id=x0,file=./disk.img \
     -device virtio-blk-device,drive=x0 \
     -device virtio-keyboard-device \
     -device virtio-serial-device \

@@ -5,6 +5,7 @@ pub mod devpts;
 pub mod epoll;
 pub mod exfat;
 pub mod ext2;
+pub mod ext4;
 pub mod file_handle;
 pub mod file_table;
 pub mod fs_resolver;
@@ -27,6 +28,7 @@ use crate::{
     fs::{
         exfat::{ExfatFS, ExfatMountOptions},
         ext2::Ext2,
+        ext4::Ext4,
         fs_resolver::FsPath,
     },
     prelude::*,
@@ -53,6 +55,8 @@ pub fn lazy_init() {
     //The device name is specified in qemu args as --serial={device_name}
     let ext2_device_name = "vext2";
     let exfat_device_name = "vexfat";
+    let ext4_x0_device_name = "legacy_blk_0";
+    let ext4_x1_device_name = "legacy_blk_1";
 
     if let Ok(block_device_ext2) = start_block_device(ext2_device_name) {
         let ext2_fs = Ext2::open(block_device_ext2).unwrap();
@@ -66,5 +70,19 @@ pub fn lazy_init() {
         let target_path = FsPath::try_from("/exfat").unwrap();
         println!("[kernel] Mount ExFat fs at {:?} ", target_path);
         self::rootfs::mount_fs_at(exfat_fs, &target_path).unwrap();
+    }
+
+    // if let Ok(block_device_ext4) = start_block_device(ext4_x0_device_name) {
+    //     let ext4_fs = Ext4::open(block_device_ext4).unwrap();
+    //     let target_path = FsPath::try_from("/ext4x0").unwrap();
+    //     println!("[kernel] Mount Ext4 fs at {:?} ", target_path);
+    //     self::rootfs::mount_fs_at(ext4_fs, &target_path).unwrap();
+    // }
+
+    if let Ok(block_device_ext4) = start_block_device(ext4_x0_device_name) {
+        let ext2_fs = Ext2::open(block_device_ext4).unwrap();
+        let target_path = FsPath::try_from("/ext4x1").unwrap();
+        println!("[kernel] Mount Ext2 fs at {:?} ", target_path);
+        self::rootfs::mount_fs_at(ext2_fs, &target_path).unwrap();
     }
 }

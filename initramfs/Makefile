@@ -22,14 +22,15 @@ endif
 EXT2_IMAGE := $(BUILD_DIR)/ext2.img
 EXFAT_IMAGE := $(BUILD_DIR)/exfat.img
 INITRAMFS_EMPTY_DIRS := \
-	$(INITRAMFS)/root \
 	$(INITRAMFS)/tmp \
 	$(INITRAMFS)/opt \
 	$(INITRAMFS)/proc \
 	$(INITRAMFS)/dev \
 	$(INITRAMFS)/sys \
 	$(INITRAMFS)/ext2 \
-	$(INITRAMFS)/exfat
+	$(INITRAMFS)/exfat \
+	$(INITRAMFS)/ext4x0 \
+	$(INITRAMFS)/ext4x1
 # INITRAMFS_ALL_DIRS := \
 # 	$(INITRAMFS)/etc \
 # 	$(INITRAMFS)/lib/x86_64-linux-gnu \
@@ -40,22 +41,25 @@ INITRAMFS_EMPTY_DIRS := \
 # 	$(INITRAMFS)/usr/local \
 # 	$(INITRAMFS)/benchmark \
 # 	$(INITRAMFS_EMPTY_DIRS)
+# INITRAMFS_ALL_DIRS := \
+# 	$(INITRAMFS)/etc \
+# 	$(INITRAMFS)/bin \
+# 	$(INITRAMFS)/sbin \
+# 	$(INITRAMFS)/usr/bin \
+# 	$(INITRAMFS)/usr/sbin \
+# 	$(INITRAMFS)/lib/riscv64-linux-gnu \
+# 	$(INITRAMFS)/lib64 \
+# 	$(INITRAMFS)/usr/lib/riscv64-linux-gnu \
+# 	$(INITRAMFS)/usr/lib64 \
+# 	$(INITRAMFS_EMPTY_DIRS)
 INITRAMFS_ALL_DIRS := \
-	$(INITRAMFS)/etc \
+ 	$(INITRAMFS)/etc \
 	$(INITRAMFS)/bin \
 	$(INITRAMFS)/sbin \
 	$(INITRAMFS)/usr/bin \
 	$(INITRAMFS)/usr/sbin \
-	$(INITRAMFS)/lib/riscv64-linux-gnu \
-	$(INITRAMFS)/lib64 \
-	$(INITRAMFS)/usr/lib/riscv64-linux-gnu \
-	$(INITRAMFS)/usr/lib64 \
+	$(INITRAMFS)/root \
 	$(INITRAMFS_EMPTY_DIRS)
-# INITRAMFS_ALL_DIRS := \
-#  	$(INITRAMFS)/etc \
-# 	$(INITRAMFS)/bin \
-# 	$(INITRAMFS)/usr/bin \
-# 	$(INITRAMFS_EMPTY_DIRS)
 
 # Include test as target if BENCHMARK is not set.
 ifeq ($(BENCHMARK), none)
@@ -109,6 +113,7 @@ $(SYSCALL_TEST_DIR):
 
 .PHONY: $(INITRAMFS_IMAGE)
 $(INITRAMFS_IMAGE): $(INITRAMFS_FILELIST)
+	@sudo chown -R root:root $(INITRAMFS)
 	@if ! cmp -s $(INITRAMFS_FILELIST) $(INITRAMFS_FILELIST).previous || ! test -f $@; then \
 		echo "Generating the initramfs image..."; \
 		cp -f $(INITRAMFS_FILELIST) $(INITRAMFS_FILELIST).previous; \
@@ -191,7 +196,7 @@ $(TMP_DIR)/busybox/_install: $(TMP_DIR)/busybox $(TOOLCHAIN_DIR)/riscv64
 	@# Modify the busybox config file to enable statically linked
 	@sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' $(TMP_DIR)/busybox/.config
 	@make --no-print-directory -C $(TMP_DIR)/busybox CROSS_COMPILE=$(TOOLCHAIN_DIR)/riscv64/bin/riscv64-linux- ARCH=riscv64
-	@make --no-print-directory -C $(TMP_DIR)/busybox install CROSS_COMPILE=$(TOOLCHAIN_DIR)/riscv64/bin/riscv64-linux- ARCH=riscv64 CFLAGS="-fno-stack-protector"
+	@make --no-print-directory -C $(TMP_DIR)/busybox install CROSS_COMPILE=$(TOOLCHAIN_DIR)/riscv64/bin/riscv64-linux- ARCH=riscv64
 
 
 # =========================== InitRamFs ===============================
@@ -203,20 +208,24 @@ $(INITRAMFS_EMPTY_DIRS):
 $(INITRAMFS)/bin: $(TMP_DIR)/busybox/_install
 	@mkdir -p $@
 	@cp -P -r $(TMP_DIR)/busybox/_install/bin/* $@
+	@sudo chown -R root:root $(INITRAMFS)/bin
 
 $(INITRAMFS)/sbin: $(TMP_DIR)/busybox/_install $(TOOLCHAIN_DIR)/riscv64
 	@cp -r $(TMP_DIR)/busybox/_install/sbin $@
 	@cp -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/sbin/* $@
+	@sudo chown -R root:root $(INITRAMFS)/sbin
 
 $(INITRAMFS)/usr/bin: $(TMP_DIR)/busybox/_install $(TOOLCHAIN_DIR)/riscv64
 	@mkdir -p $(INITRAMFS)/usr
 	@cp -P -r $(TMP_DIR)/busybox/_install/usr/bin $@
-	@cp -P -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/usr/bin/* $@
+	# @cp -P -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/usr/bin/* $@
+	@sudo chown -R root:root $(INITRAMFS)/usr/bin
 
 $(INITRAMFS)/usr/sbin: $(TMP_DIR)/busybox/_install $(TOOLCHAIN_DIR)/riscv64
 	@mkdir -p $(INITRAMFS)/usr
 	@cp -r $(TMP_DIR)/busybox/_install/usr/sbin $@
-	@cp -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/usr/sbin/* $@
+	# @cp -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/usr/sbin/* $@
+	@sudo chown -R root:root $(INITRAMFS)/usr/sbin
 
 $(INITRAMFS)/lib/riscv64-linux-gnu: $(TOOLCHAIN_DIR)/riscv64
 	@mkdir -p $@
@@ -241,3 +250,7 @@ $(INITRAMFS)/etc:
 	@mkdir -p $@
 	@cp -r $(CUR_DIR)/etc/* $@
 	@cp -r $(TOOLCHAIN_DIR)/riscv64/riscv64-buildroot-linux-gnu/sysroot/etc/* $@
+
+$(INITRAMFS)/root:
+	@mkdir -p $@
+	@cp -r $(CUR_DIR)/root/* $@

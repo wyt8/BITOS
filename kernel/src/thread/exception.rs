@@ -55,16 +55,14 @@ pub fn handle_exception(ctx: &Context, context: &UserContext) {
         }
     }
 
-    #[cfg(target_arch = "riscv64")]{
-        if let Ok(illegal_instruction_info) = IllegalInstructionFaultInfo::try_from(trap_info) {
-            if illegal_instruction_info.is_floating_point_exception() {
-                warn!(
-                    "Floating point exception occurred at address 0x{:x}",
-                    illegal_instruction_info.address
-                );
-                context.init_fpu_state();
-                return;
-            }
+    if let Ok(illegal_instruction_info) = IllegalInstructionFaultInfo::try_from(trap_info) {
+        if illegal_instruction_info.is_floating_point_exception() {
+            warn!(
+                "Floating point exception occurred at address 0x{:x}",
+                illegal_instruction_info.address
+            );
+            context.init_fpu_state();
+            return;
         }
     }
 

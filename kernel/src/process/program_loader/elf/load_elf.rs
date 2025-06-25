@@ -7,7 +7,10 @@
 
 use align_ext::AlignExt;
 use aster_rights::Full;
-use ostd::mm::{CachePolicy, PageFlags, PageProperty, VmIo};
+use ostd::{
+    mm::{CachePolicy, PageFlags, PageProperty, VmIo},
+    task::disable_preempt,
+};
 use xmas_elf::program::{self, ProgramHeader64};
 
 use super::elf_file::Elf;
@@ -45,7 +48,7 @@ pub fn load_elf_to_vm(
 ) -> Result<ElfLoadInfo> {
     let parsed_elf = Elf::parse_elf(file_header)?;
 
-    let ldso = lookup_and_parse_ldso(&parsed_elf, file_header, fs_resolver)?;
+    let ldso = lookup_and_parse_ldso(&parsed_elf, file_header, fs_resolver, &elf_file)?;
 
     match init_and_map_vmos(process_vm, ldso, &parsed_elf, &elf_file) {
         Ok((entry_point, mut aux_vec)) => {
@@ -89,9 +92,10 @@ fn lookup_and_parse_ldso(
     elf: &Elf,
     file_header: &[u8],
     fs_resolver: &FsResolver,
+    elf_file: &Dentry
 ) -> Result<Option<(Dentry, Elf)>> {
     let ldso_file = {
-        let Some(ldso_path) = elf.ldso_path(file_header)? else {
+        let Some(ldso_path) = elf.ldso_path(file_header, elf_file)? else {
             return Ok(None);
         };
         let fs_path = FsPath::new(AT_FDCWD, &ldso_path)?;
@@ -311,9 +315,10 @@ fn map_segment_vmo(
         // Tail padding: If the segment's mem_size is larger than file size,
         // then the bytes that are not backed up by file content should be zeros.(usually .data/.bss sections).
 
+        let preempt_guard = disable_preempt();
         let mut cursor = root_vmar
             .vm_space()
-            .cursor_mut(&(map_addr..map_addr + segment_size))?;
+            .cursor_mut(&preempt_guard, &(map_addr..map_addr + segment_size))?;
         let page_flags = PageFlags::from(perms) | PageFlags::ACCESSED;
 
         // Head padding.
@@ -330,7 +335,7 @@ fn map_segment_vmo(
             };
             cursor.map(
                 new_frame.into(),
-                PageProperty::new(page_flags, CachePolicy::Writeback),
+                PageProperty::new_user(page_flags, CachePolicy::Writeback),
             );
         }
 
@@ -355,7 +360,7 @@ fn map_segment_vmo(
             cursor.jump(tail_page_addr)?;
             cursor.map(
                 new_frame.into(),
-                PageProperty::new(page_flags, CachePolicy::Writeback),
+                PageProperty::new_user(page_flags, CachePolicy::Writeback),
             );
         }
     }

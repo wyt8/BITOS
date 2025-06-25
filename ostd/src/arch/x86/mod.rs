@@ -7,14 +7,14 @@ pub(crate) mod cpu;
 pub mod device;
 pub(crate) mod ex_table;
 pub(crate) mod io;
-pub mod iommu;
+pub(crate) mod iommu;
 pub(crate) mod irq;
-pub(crate) mod kernel;
+pub mod kernel;
 pub(crate) mod mm;
 pub(crate) mod pci;
 pub mod qemu;
-pub mod serial;
-pub mod task;
+pub(crate) mod serial;
+pub(crate) mod task;
 pub mod timer;
 pub mod trap;
 
@@ -25,13 +25,9 @@ use x86::cpuid::{CpuId, FeatureInfo};
 #[cfg(feature = "cvm_guest")]
 pub(crate) mod tdx_guest;
 
-use core::{
-    arch::x86_64::{_rdrand64_step, _rdtsc},
-    sync::atomic::Ordering,
-};
+use core::sync::atomic::Ordering;
 
-use kernel::apic::ioapic;
-use log::{info, warn};
+use log::warn;
 
 #[cfg(feature = "cvm_guest")]
 pub(crate) fn init_cvm_guest() {
@@ -67,21 +63,11 @@ static CPU_FEATURES: Once<FeatureInfo> = Once::new();
 pub(crate) unsafe fn late_init_on_bsp() {
     // SAFETY: This function is only called once on BSP.
     unsafe { trap::init() };
-    irq::init();
-
-    kernel::acpi::init();
 
     let io_mem_builder = construct_io_mem_allocator_builder();
 
-    match kernel::apic::init(&io_mem_builder) {
-        Ok(_) => {
-            ioapic::init(&io_mem_builder);
-        }
-        Err(err) => {
-            info!("APIC init error:{:?}", err);
-            kernel::pic::enable();
-        }
-    }
+    kernel::apic::init(&io_mem_builder).expect("APIC doesn't exist");
+    kernel::irq::init(&io_mem_builder);
 
     kernel::tsc::init_tsc_freq();
     timer::init_bsp();
@@ -96,9 +82,6 @@ pub(crate) unsafe fn late_init_on_bsp() {
             Err(err) => warn!("IOMMU initialization error:{:?}", err),
         }
     });
-
-    // Some driver like serial may use PIC
-    kernel::pic::init();
 
     // SAFETY:
     // 1. All the system device memory have been removed from the builder.
@@ -119,9 +102,9 @@ pub(crate) unsafe fn init_on_ap() {
 
 pub(crate) fn interrupts_ack(irq_number: usize) {
     if !cpu::context::CpuException::is_cpu_exception(irq_number as u16) {
-        kernel::apic::with_borrow(|apic| {
-            apic.eoi();
-        });
+        // TODO: We're in the interrupt context, so `disable_preempt()` is not
+        // really necessary here.
+        kernel::apic::get_or_init(&crate::task::disable_preempt() as _).eoi();
     }
 }
 
@@ -132,6 +115,8 @@ pub fn tsc_freq() -> u64 {
 
 /// Reads the current value of the processor’s time-stamp counter (TSC).
 pub fn read_tsc() -> u64 {
+    use core::arch::x86_64::_rdtsc;
+
     // SAFETY: It is safe to read a time-related counter.
     unsafe { _rdtsc() }
 }
@@ -140,6 +125,8 @@ pub fn read_tsc() -> u64 {
 ///
 /// Returns None if no random value was generated.
 pub fn read_random() -> Option<u64> {
+    use core::arch::x86_64::_rdrand64_step;
+
     // Recommendation from "Intel® Digital Random Number Generator (DRNG) Software
     // Implementation Guide" - Section 5.2.1 and "Intel® 64 and IA-32 Architectures
     // Software Developer’s Manual" - Volume 1 - Section 7.3.17.1.

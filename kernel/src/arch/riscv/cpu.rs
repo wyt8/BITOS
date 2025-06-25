@@ -164,7 +164,7 @@ impl TryFrom<&CpuExceptionInfo> for IllegalInstructionFaultInfo {
         if let Exception::IllegalInstruction = value.cpu_exception() {
             Ok(IllegalInstructionFaultInfo {
                 address: value.page_fault_addr,
-                instruction: value.instruction,
+                instruction: value.illegal_instruction,
             })
         } else {
             Err(())
