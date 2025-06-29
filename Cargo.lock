@@ -225,6 +225,7 @@ dependencies = [
  "lending-iterator",
  "libflate",
  "log",
+ "loongArch64",
  "lru",
  "osdk-frame-allocator",
  "osdk-heap-allocator",

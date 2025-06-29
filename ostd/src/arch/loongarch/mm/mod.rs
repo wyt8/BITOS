@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use alloc::fmt;
-use core::ops::Range;
+use core::{arch::asm, ops::Range};
 
 use crate::{
     mm::{
@@ -13,6 +13,8 @@ use crate::{
     Pod,
 };
 
+pub(crate) const NR_ENTRIES_PER_PAGE: usize = 512;
+
 #[derive(Clone, Debug, Default)]
 pub struct PagingConsts {}
 
@@ -20,9 +22,9 @@ impl PagingConstsTrait for PagingConsts {
     const BASE_PAGE_SIZE: usize = 4096;
     const NR_LEVELS: PagingLevel = 4;
     const ADDRESS_WIDTH: usize = 48;
-    const HIGHEST_TRANSLATION_LEVEL: PagingLevel = 4;
-    const PTE_SIZE: usize = core::mem::size_of::<PageTableEntry>();
     const VA_SIGN_EXT: bool = true;
+    const HIGHEST_TRANSLATION_LEVEL: PagingLevel = 1;
+    const PTE_SIZE: usize = core::mem::size_of::<PageTableEntry>();
 }
 
 bitflags::bitflags! {
@@ -30,7 +32,7 @@ bitflags::bitflags! {
     #[repr(C)]
     /// Possible flags for a page table entry.
     pub struct PageTableFlags: usize {
-        /// Specifies whether the mapped frame or page table is valid.
+        /// Specifies whether the mapped frame is valid.
         const VALID =           1 << 0;
         /// Whether the memory area represented by this entry is modified.
         const DIRTY =           1 << 1;
@@ -45,19 +47,32 @@ bitflags::bitflags! {
         /// falling on the address space of the table page entry.
         const MATL =            1 << 4;
         const MATH =            1 << 5;
-        /// Whether the memory area represented by this entry is accessed.
-        const GLOBAL_HUGE =          1 << 6;
+        /// If this entry is a basic page table entry, it is `GLOBAL`,
+        /// which means that the memory area represented by this entry is
+        /// accessible by all programs.
+        /// If this entry is a huge page table entry, it is `HUGE`,
+        /// which means that the memory area represented by this entry is
+        /// a huge page.
+        const GLOBAL_OR_HUGE =  1 << 6;
         /// Specifies whether the mapped frame or page table is loaded in memory.
+        /// This flag does not fill in TLB.
         const PRESENT =         1 << 7;
         /// Controls whether writes to the mapped frames are allowed.
+        /// This flag does not fill in TLB.
         const WRITABLE =        1 << 8;
-        /// ...
-        const GLOBAL =          1 << 12;
+        // Whether this entry is a basic page table entry.
+        const IS_BASIC =        1 << 9;
+        // First bit ignored by MMU.
+        const RSV1 =            1 << 10;
+        // Second bit ignored by MMU.
+        const RSV2 =            1 << 11;
+        /// If this entry is a huge page table entry, it is `GLOBAL`.
+        const GLOBAL_IN_HUGE =  1 << 12;
         /// Controls whether reads to the mapped frames are not allowed.
         const NOT_READABLE =    1 << 61;
         /// Controls whether execution code in the mapped frames are not allowed.
         const NOT_EXECUTABLE =  1 << 62;
-        /// Whether the PageTableEntry can only be accessed by the privileged level `PLV` field inferred 
+        /// Whether the PageTableEntry can only be accessed by the privileged level `PLV` field inferred
         const RPLV =            1 << 63;
     }
 }
@@ -67,9 +82,12 @@ bitflags::bitflags! {
 /// This flush performs regardless of the global-page bit. So it can flush both global
 /// and non-global entries.
 pub(crate) fn tlb_flush_addr(vaddr: Vaddr) {
-    // unsafe {
-    //     riscv::asm::sfence_vma(0, vaddr);
-    // }
+    unsafe {
+        asm!(
+            "invtlb 0, $zero, {}",
+            in(reg) vaddr
+        );
+    }
 }
 
 /// Flush any TLB entry that intersects with the given address range.
@@ -81,32 +99,21 @@ pub(crate) fn tlb_flush_addr_range(range: &Range<Vaddr>) {
 
 /// Flush all TLB entries except for the global-page entries.
 pub(crate) fn tlb_flush_all_excluding_global() {
-    // // TODO: excluding global?
-    // riscv::asm::sfence_vma_all()
+    unsafe {
+        asm!("invtlb 3, $zero, $zero");
+    }
 }
 
 /// Flush all TLB entries, including global-page entries.
 pub(crate) fn tlb_flush_all_including_global() {
-    // riscv::asm::sfence_vma_all()
-}
-
-
-#[derive(Clone, Copy, Pod, Default)]
-#[repr(C)]
-pub struct PageTableEntry(usize);
-
-impl PageTableEntry {
-    const PHYS_ADDR_MASK: usize = 0x0000_FFFF_FFFF_F000;
-
-    fn new_paddr(paddr: Paddr) -> Self {
-        let ppn = paddr >> 12;
-        Self(ppn << 10)
+    unsafe {
+        asm!("invtlb 0, $zero, $zero");
     }
 }
 
 /// Activate the given level 4 page table.
 ///
-/// "satp" register doesn't have a field that encodes the cache policy,
+/// "pgdl" or "pgdh" register doesn't have a field that encodes the cache policy,
 /// so `_root_pt_cache` is ignored.
 ///
 /// # Safety
@@ -115,19 +122,48 @@ impl PageTableEntry {
 /// changing the page mapping.
 pub unsafe fn activate_page_table(root_paddr: Paddr, _root_pt_cache: CachePolicy) {
     assert!(root_paddr % PagingConsts::BASE_PAGE_SIZE == 0);
-    // let ppn = root_paddr >> 12;
-    // riscv::register::satp::set(riscv::register::satp::Mode::Sv48, 0, ppn);
+    loongArch64::register::pgdl::set_base(root_paddr);
+    loongArch64::register::pgdh::set_base(root_paddr);
 }
 
 pub fn current_page_table_paddr() -> Paddr {
     let pgdl = loongArch64::register::pgdl::read().raw();
     let pgdh = loongArch64::register::pgdh::read().raw();
     let pgd = loongArch64::register::pgd::read().raw();
-    assert_eq!(pgdl, pgdh, "Only support to share the same page table for both user and kernel space");
-    pgdl & 0x0000_FFFF_FFFF_F000
+    assert_eq!(
+        pgdl, pgdh,
+        "Only support to share the same page table for both user and kernel space"
+    );
+    pgdl
 }
 
+#[derive(Clone, Copy, Pod, Default)]
+#[repr(C)]
+pub struct PageTableEntry(usize);
 
+impl PageTableEntry {
+    const PHYS_ADDR_MASK: usize = 0x0000_FFFF_FFFF_F000;
+
+    fn is_user(&self) -> bool {
+        self.0 & PageTableFlags::PLVL.bits() != 0 && self.0 & PageTableFlags::PLVH.bits() != 0
+    }
+
+    fn is_huge(&self) -> bool {
+        if self.0 & PageTableFlags::IS_BASIC.bits() != 0 {
+            return false;
+        } else {
+            return self.0 & PageTableFlags::GLOBAL_OR_HUGE.bits() != 0;
+        }
+    }
+
+    fn is_global(&self) -> bool {
+        if self.0 & PageTableFlags::IS_BASIC.bits() != 0 {
+            return self.0 & PageTableFlags::GLOBAL_OR_HUGE.bits() != 0;
+        } else {
+            return self.0 & PageTableFlags::GLOBAL_IN_HUGE.bits() != 0;
+        }
+    }
+}
 
 /// Parse a bit-flag bits `val` in the representation of `from` to `to` in bits.
 macro_rules! parse_flags {
@@ -143,38 +179,59 @@ impl PodOnce for PageTableEntry {}
 
 impl PageTableEntryTrait for PageTableEntry {
     fn is_present(&self) -> bool {
-        self.0 & PageTableFlags::VALID.bits() != 0
+        // TODO: Handle the ppn is 0
+        self.0 & PageTableFlags::VALID.bits() != 0 || self.0 & Self::PHYS_ADDR_MASK != 0
     }
 
-    fn new_page(paddr: Paddr, _level: PagingLevel, prop: PageProperty) -> Self {
+    fn new_page(paddr: Paddr, level: PagingLevel, prop: PageProperty) -> Self {
+        let flags = if level == 1 {
+            PageTableFlags::IS_BASIC.bits()
+        } else {
+            PageTableFlags::GLOBAL_OR_HUGE.bits()
+        };
         let mut pte = Self(paddr & Self::PHYS_ADDR_MASK);
         pte.set_prop(prop);
-        pte
+        let pte = pte.0 | flags;
+        Self(pte)
     }
 
     fn new_pt(paddr: Paddr) -> Self {
-        // In LoongArch, non-leaf PTE only contains the physical address of the next page table.
         Self(paddr & Self::PHYS_ADDR_MASK)
     }
 
     fn paddr(&self) -> Paddr {
-        let ppn = (self.0 & Self::PHYS_ADDR_MASK) >> 10;
-        ppn << 12
+        if self.is_huge() {
+            let paddr =
+                (self.0 & Self::PHYS_ADDR_MASK & !PageTableFlags::GLOBAL_IN_HUGE.bits()) >> 12;
+            paddr << 12
+        } else {
+            let ppn = (self.0 & Self::PHYS_ADDR_MASK) >> 12;
+            ppn << 12
+        }
     }
 
     fn prop(&self) -> PageProperty {
-    let flags = (parse_flags!(!(self.0), PageTableFlags::NOT_READABLE, PageFlags::R))
+        // Basic page table entry
+        let flags = (parse_flags!(!(self.0), PageTableFlags::NOT_READABLE, PageFlags::R))
             | (parse_flags!(self.0, PageTableFlags::WRITABLE, PageFlags::W))
             | (parse_flags!(!(self.0), PageTableFlags::NOT_EXECUTABLE, PageFlags::X))
+            // TODO: How to get the accessed bit in loongarch?
             | (parse_flags!(self.0, PageTableFlags::PRESENT, PageFlags::ACCESSED))
-            | (parse_flags!(self.0, PageTableFlags::DIRTY, PageFlags::DIRTY));
-            // | (parse_flags!(self.0, PageTableFlags::, PageFlags::AVAIL1))
-            // | (parse_flags!(self.0, PageTableFlags::RSV2, PageFlags::AVAIL2));
-        let priv_flags = (parse_flags!(self.0, PageTableFlags::PLVL, PrivFlags::USER))
-            | (parse_flags!(self.0, PageTableFlags::GLOBAL, PrivFlags::GLOBAL));
+            | (parse_flags!(self.0, PageTableFlags::DIRTY, PageFlags::DIRTY))
+            | (parse_flags!(self.0, PageTableFlags::RSV1, PageFlags::AVAIL1))
+            | (parse_flags!(self.0, PageTableFlags::RSV2, PageFlags::AVAIL2));
+        let mut priv_flags = PrivFlags::empty().bits();
+        if self.is_user() {
+            priv_flags |= PrivFlags::USER.bits();
+        }
+        if self.is_global() {
+            priv_flags |= PrivFlags::GLOBAL.bits();
+        }
 
         let cache = if self.0 & PageTableFlags::MATL.bits() != 0 {
-            CachePolicy::Uncacheable
+            CachePolicy::Writeback
+        } else if self.0 & PageTableFlags::MATH.bits() != 0 {
+            CachePolicy::WriteCombining
         } else {
             CachePolicy::Writeback
         };
@@ -188,27 +245,41 @@ impl PageTableEntryTrait for PageTableEntry {
 
     fn set_prop(&mut self, prop: PageProperty) {
         let mut flags = PageTableFlags::VALID.bits()
-            | parse_flags!(prop.flags.bits(), PageFlags::R, PageTableFlags::NOT_READABLE)
+            | PageTableFlags::DIRTY.bits()
+            | parse_flags!(
+                !prop.flags.bits(),
+                PageFlags::R,
+                PageTableFlags::NOT_READABLE
+            )
             | parse_flags!(prop.flags.bits(), PageFlags::W, PageTableFlags::WRITABLE)
-            | parse_flags!(prop.flags.bits(), PageFlags::X, PageTableFlags::NOT_EXECUTABLE)
             | parse_flags!(
-                prop.priv_flags.bits(),
-                PrivFlags::USER,
-                PageTableFlags::PLVL
+                !prop.flags.bits(),
+                PageFlags::X,
+                PageTableFlags::NOT_EXECUTABLE
             )
-            | parse_flags!(
-                prop.priv_flags.bits(),
-                PrivFlags::GLOBAL,
-                PageTableFlags::GLOBAL
-            )
-            | parse_flags!(prop.flags.bits(), PageFlags::AVAIL1, PageTableFlags::MATL)
-            | parse_flags!(prop.flags.bits(), PageFlags::AVAIL2, PageTableFlags::MATH);
-
+            | parse_flags!(prop.flags.bits(), PageFlags::DIRTY, PageTableFlags::DIRTY)
+            // TODO: How to get the accessed bit in loongarch?
+            | parse_flags!(prop.flags.bits(), PageFlags::ACCESSED, PageTableFlags::PRESENT)
+            | parse_flags!(prop.flags.bits(), PageFlags::AVAIL1, PageTableFlags::RSV1)
+            | parse_flags!(prop.flags.bits(), PageFlags::AVAIL2, PageTableFlags::RSV2);
+        if prop.priv_flags.contains(PrivFlags::USER) {
+            flags |= PageTableFlags::PLVL.bits();
+            flags |= PageTableFlags::PLVH.bits();
+        }
+        if prop.priv_flags.contains(PrivFlags::GLOBAL) {
+            if self.is_huge() {
+                flags |= PageTableFlags::GLOBAL_IN_HUGE.bits();
+            } else {
+                flags |= PageTableFlags::GLOBAL_OR_HUGE.bits();
+            }
+        }
         match prop.cache {
-            CachePolicy::Writeback => (),
-            CachePolicy::Uncacheable => {
-                // // Currently, Asterinas uses `Uncacheable` for I/O memory.
-                // flags |= PageTableFlags::PBMT_IO.bits()
+            CachePolicy::Writeback => {
+                flags |= PageTableFlags::MATL.bits();
+            }
+            CachePolicy::Uncacheable => (),
+            CachePolicy::WriteCombining => {
+                flags |= PageTableFlags::MATH.bits();
             }
             _ => panic!("unsupported cache policy"),
         }
@@ -217,8 +288,7 @@ impl PageTableEntryTrait for PageTableEntry {
     }
 
     fn is_last(&self, level: PagingLevel) -> bool {
-        let rwx = PageTableFlags::NOT_READABLE | PageTableFlags::WRITABLE | PageTableFlags::NOT_EXECUTABLE;
-        level == 1 || (self.0 & rwx.bits()) != 0
+        level == 1 || self.is_huge()
     }
 }
 

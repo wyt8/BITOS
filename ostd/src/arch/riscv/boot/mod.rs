@@ -28,7 +28,9 @@ fn parse_bootloader_name() -> &'static str {
 }
 
 fn parse_kernel_commandline() -> &'static str {
-    DEVICE_TREE.get().unwrap().chosen().bootargs().unwrap_or("")
+    let str = DEVICE_TREE.get().unwrap().chosen().bootargs().unwrap_or("");
+    early_println!("Kernel command line: {}", str);
+    str
 }
 
 fn parse_initramfs() -> Option<&'static [u8]> {
@@ -142,6 +144,7 @@ pub extern "C" fn riscv_boot(_hart_id: usize, device_tree_paddr: usize) -> ! {
         acpi_arg: parse_acpi_arg(),
         framebuffer_arg: parse_framebuffer_info(),
         memory_regions: parse_memory_regions(),
+        embeded_data: [None; 10],
     });
 
     call_ostd_main();

@@ -1,14 +1,42 @@
-use core::fmt::Debug;
+use core::{arch::asm, fmt::Debug};
 
-// use riscv::register::scause::{Exception, Trap};
+use loongArch64::register::estat::{self, Exception, Interrupt, Trap};
 
 pub use crate::arch::trap::GeneralRegs as RawGeneralRegs;
 use crate::{
-    arch::trap::{TrapFrame, UserContext as RawUserContext},
+    arch::{mm::tlb_flush_addr, trap::{TrapFrame, UserContext as RawUserContext}},
     user::{ReturnReason, UserContextApi, UserContextApiInternal},
 };
 
-use loongArch64::register::estat::Trap;
+/// CPU exception information.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct CpuExceptionInfo {
+    /// The type of the exception.
+    pub code: Exception,
+    /// The error code associated with the exception.
+    pub page_fault_addr: usize,
+    pub error_code: usize, // TODO
+    pub instruction: usize,
+}
+
+impl Default for CpuExceptionInfo {
+    fn default() -> Self {
+        CpuExceptionInfo {
+            code: Exception::Breakpoint,
+            page_fault_addr: 0,
+            error_code: 0,
+            instruction: 0,
+        }
+    }
+}
+
+impl CpuExceptionInfo {
+    /// Get corresponding CPU exception
+    pub fn cpu_exception(&self) -> CpuException {
+        self.code
+    }
+}
 
 /// Cpu context, including both general-purpose registers and FPU state.
 #[derive(Clone, Copy, Debug)]
@@ -89,6 +117,118 @@ impl UserContext {
     }
 }
 
+impl UserContextApiInternal for UserContext {
+    fn execute<F>(&mut self, mut has_kernel_event: F) -> ReturnReason
+    where
+        F: FnMut() -> bool,
+    {
+        let ret = loop {
+            self.user_context.run();
+
+            let cause = loongArch64::register::estat::read().cause();
+            let badv = loongArch64::register::badv::read().raw();
+            let badi = loongArch64::register::badi::read().raw();
+            let era = loongArch64::register::era::read().raw();
+            let pgd = loongArch64::register::pgd::read().raw();
+            let tlbehi = loongArch64::register::tlbehi::read().raw();
+            let tlbelo0 = loongArch64::register::tlbelo0::read().raw();
+            let tlbelo1 = loongArch64::register::tlbelo1::read().raw();
+
+            match cause {
+                Trap::Exception(exception) => match exception {
+                    Exception::Syscall => {
+                        self.user_context.era += 4;
+                        break ReturnReason::UserSyscall;
+                    }
+                    Exception::LoadPageFault
+                    | Exception::StorePageFault
+                    | Exception::FetchPageFault
+                    | Exception::PageModifyFault
+                    | Exception::PageNonReadableFault
+                    | Exception::PageNonExecutableFault
+                    | Exception::PagePrivilegeIllegal => {
+                        tlb_flush_addr(badv);
+                        // Handle page fault
+                        self.cpu_exception_info = CpuExceptionInfo {
+                            code: exception,
+                            page_fault_addr: badv,
+                            error_code: 0, // TODO: Set error code if needed
+                            instruction: badi,
+                        };
+                        break ReturnReason::UserException;
+                    }
+                    Exception::FetchInstructionAddressError
+                    | Exception::MemoryAccessAddressError
+                    | Exception::AddressNotAligned
+                    | Exception::BoundsCheckFault
+                    | Exception::Breakpoint
+                    | Exception::InstructionNotExist
+                    | Exception::InstructionPrivilegeIllegal
+                    | Exception::FloatingPointUnavailable => {
+                        // Handle other exceptions
+                        self.cpu_exception_info = CpuExceptionInfo {
+                            code: exception,
+                            page_fault_addr: 0,
+                            error_code: 0, // TODO: Set error code if needed
+                            instruction: badi,
+                        };
+                        log::warn!(
+                            "Exception {exception:?} occurred, badv: {badv:#x?}, badi: {badi:#x?}, era: {era:#x?}"
+                        );
+                        break ReturnReason::UserException;
+                    }
+                    Exception::TLBRFill => panic!("Shuld not happen"),
+                },
+                Trap::Interrupt(interrupt) => match interrupt {
+                    Interrupt::SWI0 => todo!(),
+                    Interrupt::SWI1 => todo!(),
+                    Interrupt::HWI0 => {
+                        log::info!("Handling HWI0 interrupt");
+                    },
+                    Interrupt::HWI1 => todo!(),
+                    Interrupt::HWI2 => todo!(),
+                    Interrupt::HWI3 => todo!(),
+                    Interrupt::HWI4 => todo!(),
+                    Interrupt::HWI5 => todo!(),
+                    Interrupt::HWI6 => todo!(),
+                    Interrupt::HWI7 => todo!(),
+                    Interrupt::PMI => todo!(),
+                    Interrupt::Timer => todo!(),
+                    Interrupt::IPI => todo!(),
+                },
+                Trap::MachineError(machine_error) => panic!(
+                    "Machine error: {machine_error:?}, badv: {badv:#x?}, badi: {badi:#x?}, era: {era:#x?}"
+                ),
+                Trap::Unknown => panic!(
+                    "Unknown trap, badv: {badv:#x?}, badi: {badi:#x?}, era: {era:#x?}"
+                ),
+            }
+
+            if has_kernel_event() {
+                break ReturnReason::KernelEvent;
+            }
+        };
+        crate::arch::irq::enable_local();
+        ret
+    }
+
+    fn as_trap_frame(&self) -> TrapFrame {
+        unimplemented!()
+        // TrapFrame {
+        //     general: self.user_context.general,
+        //     // sstatus: self.user_context.sstatus,
+        //     // sepc: self.user_context.sepc,
+        //     prmd: 0,
+        //     era: 0,
+        //     badv: 0,
+        //     crmd: 0,
+        //     ktp: 0,
+        //     kr21: 0,
+        //     fs: [0, 0],
+        // }
+    }
+}
+
 impl UserContextApi for UserContext {
     fn trap_number(&self) -> usize {
         todo!()
@@ -99,7 +239,7 @@ impl UserContextApi for UserContext {
     }
 
     fn instruction_pointer(&self) -> usize {
-        self.user_context.sepc
+        self.user_context.get_ip()
     }
 
     fn set_instruction_pointer(&mut self, ip: usize) {
@@ -114,111 +254,6 @@ impl UserContextApi for UserContext {
         self.user_context.set_sp(sp);
     }
 }
-
-impl UserContextApiInternal for UserContext {
-    fn execute<F>(&mut self, mut has_kernel_event: F) -> ReturnReason
-    where
-        F: FnMut() -> bool,
-    {
-        // let ret = loop {
-        //     self.user_context.run();
-        //     match riscv::register::scause::read().cause() {
-        //         Trap::Interrupt(_) => todo!(),
-        //         Trap::Exception(Exception::UserEnvCall) => {
-        //             self.user_context.sepc += 4;
-        //             break ReturnReason::UserSyscall;
-        //         }
-        //         Trap::Exception(e) => {
-        //             let stval = riscv::register::stval::read();
-        //             let sepc = riscv::register::sepc::read();
-        //             log::trace!("Exception, scause: {e:?}, stval: {stval:#x?}");
-        //             match e {
-        //                 // Check if the exception is a page fault
-        //                 // If so, the address is stored in stval
-        //                 Exception::StorePageFault
-        //                 | Exception::LoadPageFault
-        //                 | Exception::InstructionPageFault => {
-        //                     self.cpu_exception_info = CpuExceptionInfo {
-        //                         code: e,
-        //                         page_fault_addr: stval,
-        //                         error_code: 0,
-        //                         instruction: 0,
-        //                     };
-        //                 }
-        //                 Exception::IllegalInstruction => {
-        //                     self.cpu_exception_info = CpuExceptionInfo {
-        //                         code: e,
-        //                         page_fault_addr: sepc,
-        //                         error_code: 0,
-        //                         instruction: stval,
-        //                     };
-        //                 }
-        //                 _ => {
-        //                     self.cpu_exception_info = CpuExceptionInfo {
-        //                         code: e,
-        //                         page_fault_addr: 0,
-        //                         error_code: 0,
-        //                         instruction: 0,
-        //                     }
-        //                 }
-        //             }
-        //             break ReturnReason::UserException;
-        //         }
-        //     }
-
-        //     if has_kernel_event() {
-        //         break ReturnReason::KernelEvent;
-        //     }
-        // };
-
-        // crate::arch::irq::enable_local();
-        // ret
-        ReturnReason::UserException
-    }
-
-    fn as_trap_frame(&self) -> TrapFrame {
-        TrapFrame {
-            general: self.user_context.general,
-            sstatus: self.user_context.sstatus,
-            sepc: self.user_context.sepc,
-        }
-    }
-}
-
-/// CPU exception information.
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub struct CpuExceptionInfo {
-    /// The type of the exception.
-    pub code: Exception,
-    /// The error code associated with the exception.
-    pub page_fault_addr: usize,
-    pub error_code: usize, // TODO
-    pub instruction: usize,
-}
-
-impl Default for CpuExceptionInfo {
-    fn default() -> Self {
-        CpuExceptionInfo {
-            code: Exception::Breakpoint,
-            page_fault_addr: 0,
-            error_code: 0,
-            instruction: 0,
-        }
-    }
-}
-
-impl CpuExceptionInfo {
-    /// Get corresponding CPU exception
-    pub fn cpu_exception(&self) -> CpuException {
-        self.code
-    }
-}
-
-/// CPU exception.
-pub type CpuException = Exception;
-
-use loongArch64::register::estat::Exception;
 
 macro_rules! cpu_context_impl_getter_setter {
     ( $( [ $field: ident, $setter_name: ident] ),*) => {
@@ -261,7 +296,7 @@ cpu_context_impl_getter_setter!(
     [t6, set_t6],
     [t7, set_t7],
     [t8, set_t8],
-    [u0, set_u0],
+    [r21, set_r21],
     [fp, set_fp],
     [s0, set_s0],
     [s1, set_s1],
@@ -274,10 +309,13 @@ cpu_context_impl_getter_setter!(
     [s8, set_s8]
 );
 
+/// CPU exception.
+pub type CpuException = Exception;
+
 /// The FPU state of user task.
 ///
 /// This could be used for saving both legacy and modern state format.
-// FIXME: Implement FPU state on RISC-V platforms.
+// FIXME: Implement FPU state on LoongArch64 platforms.
 #[derive(Clone, Copy, Debug)]
 pub struct FpuState;
 

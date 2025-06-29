@@ -69,7 +69,7 @@ pub struct GpRegs {
     pub t6: usize,
     pub t7: usize,
     pub t8: usize,
-    pub u0: usize,
+    pub r21: usize,
     pub fp: usize,
     pub s0: usize,
     pub s1: usize,
@@ -105,7 +105,7 @@ macro_rules! copy_gp_regs {
         $dst.t6 = $src.t6;
         $dst.t7 = $src.t7;
         $dst.t8 = $src.t8;
-        $dst.u0 = $src.u0;
+        $dst.r21 = $src.r21;
         $dst.fp = $src.fp;
         $dst.s0 = $src.s0;
         $dst.s1 = $src.s1;
@@ -135,12 +135,12 @@ impl TryFrom<&CpuExceptionInfo> for PageFaultInfo {
     type Error = ();
 
     fn try_from(value: &CpuExceptionInfo) -> Result<Self, ()> {
-        // use riscv::register::scause::Exception;
+        use loongArch64::register::estat::Exception;
 
         let required_perms = match value.cpu_exception() {
-            // Exception::InstructionPageFault => VmPerms::EXEC,
-            // Exception::LoadPageFault => VmPerms::READ,
-            // Exception::StorePageFault => VmPerms::WRITE,
+            Exception::FetchPageFault => VmPerms::EXEC,
+            Exception::LoadPageFault => VmPerms::READ,
+            Exception::StorePageFault => VmPerms::WRITE,
             _ => return Err(()),
         };
 

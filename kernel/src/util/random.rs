@@ -47,7 +47,10 @@ pub fn init() {
 
             RNG.call_once(|| SpinLock::new(StdRng::from_seed(seed)));
         } else if #[cfg(target_arch = "loongarch64")] {
-            panic!("LoongArch64 does not support getrandom yet");
+            use rand::SeedableRng;
+            // TODO: using the loongarch64 RNG
+            let seed = <StdRng as SeedableRng>::Seed::default();
+            RNG.call_once(|| SpinLock::new(StdRng::from_seed(seed)));
         } else {
             compile_error!("unsupported target");
         }

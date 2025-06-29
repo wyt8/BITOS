@@ -11,6 +11,6 @@ pub mod context;
 /// mode ([`crate::task::atomic_mode`]).
 #[track_caller]
 pub fn sleep_for_interrupt() {
-    crate::task::atomic_mode::might_sleep();
-    unsafe { loongArch64::asm::idle() };
+    // crate::task::atomic_mode::might_sleep();
+    // unsafe { loongArch64::asm::idle() };
 }

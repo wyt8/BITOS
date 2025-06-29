@@ -23,14 +23,15 @@ pub enum QemuExitCode {
 /// This function assumes that the kernel is run in QEMU with the following
 /// QEMU command line arguments that specifies the ISA debug exit device:
 /// `-device isa-debug-exit,iobase=0xf4,iosize=0x04`.
-pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
+pub fn exit_qemu(_exit_code: QemuExitCode) -> ! {
     // In non x86 architecture, the ISA debug exit device is mapped to the address
     // which is added with `0x1000_0000` to the port number.
-    const EXIT_ADDR: *mut u32 = 0x1000_00f4 as *mut u32;
+    const EXIT_ADDR: *mut u8 = 0x8000_0000_100e_001c as *mut u8;
+    const EXIT_VALUE: u8 = 0x34;
 
     // SAFETY: The write to the ISA debug exit mapped address is safe.
     unsafe {
-        core::ptr::write_volatile(EXIT_ADDR, exit_code as u32);
+        core::ptr::write_volatile(EXIT_ADDR, EXIT_VALUE);
     }
     unreachable!()
 }

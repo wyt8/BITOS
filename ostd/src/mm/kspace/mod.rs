@@ -66,9 +66,15 @@ const ADDR_WIDTH_SHIFT: isize = PagingConsts::ADDRESS_WIDTH as isize - 48;
 
 /// Start of the kernel address space.
 /// This is the _lowest_ address of the x86-64's _high_ canonical addresses.
+#[cfg(not(target_arch = "loongarch64"))]
 pub const KERNEL_BASE_VADDR: Vaddr = 0xffff_8000_0000_0000 << ADDR_WIDTH_SHIFT;
+#[cfg(target_arch = "loongarch64")]
+pub const KERNEL_BASE_VADDR: Vaddr = 0x9000_0000_0000_0000 << ADDR_WIDTH_SHIFT;
 /// End of the kernel address space (non inclusive).
+// #[cfg(not(target_arch = "loongarch64"))]
 pub const KERNEL_END_VADDR: Vaddr = 0xffff_ffff_ffff_0000 << ADDR_WIDTH_SHIFT;
+// #[cfg(target_arch = "loongarch64")]
+// pub const KERNEL_END_VADDR: Vaddr = 0x9000_ffff_ffff_0000 << ADDR_WIDTH_SHIFT;
 
 /// The kernel code is linear mapped to this address.
 ///
@@ -178,7 +184,7 @@ pub fn init_kernel_page_table(meta_pages: Segment<MetaPageMeta>) {
     let kpt = PageTable::<KernelPtConfig>::new_kernel_page_table();
     let preempt_guard = disable_preempt();
 
-    // Do linear mappings for the kernel.
+    #[cfg(not(target_arch = "loongarch64"))]
     {
         let max_paddr = crate::mm::frame::max_paddr();
         let from = LINEAR_MAPPING_BASE_VADDR..LINEAR_MAPPING_BASE_VADDR + max_paddr;
@@ -218,6 +224,7 @@ pub fn init_kernel_page_table(meta_pages: Segment<MetaPageMeta>) {
         }
     }
 
+    #[cfg(not(target_arch = "loongarch64"))]
     // Map for the kernel code itself.
     // TODO: set separated permissions for each segments in the kernel.
     {

@@ -95,7 +95,7 @@ pub fn init() {
     #[cfg(target_arch = "x86_64")]
     net::init();
     sched::init();
-    fs::rootfs::init(boot_info().initramfs.expect("No initramfs found!")).unwrap();
+    fs::rootfs::init(boot_info().embeded_data).unwrap();
     device::init().unwrap();
     syscall::init();
     #[cfg(target_arch = "x86_64")]

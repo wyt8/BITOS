@@ -4,7 +4,17 @@
 
 use crate::cpu::PinCurrentCpu;
 
-pub(crate) const IRQ_NUM_MIN: u8 = 0;
+pub fn init() {
+    // enable_local();
+    // unsafe {
+    //     let p = 0x800000002ff00000 as *mut u32;
+    //     let value = p.read_volatile();
+    //     p.write_volatile(32);
+    //     let after_value = p.read_volatile();
+    // }
+}
+
+pub(crate) const IRQ_NUM_MIN: u8 = 32;
 pub(crate) const IRQ_NUM_MAX: u8 = 255;
 
 pub(crate) struct IrqRemapping {

@@ -136,11 +136,11 @@ impl DeviceInner {
     pub fn init(mut transport: Box<dyn VirtioTransport>) -> Result<Arc<Self>, VirtioDeviceError> {
         let config_manager = VirtioBlockConfig::new_manager(transport.as_ref());
         debug!("virio_blk_config = {:?}", config_manager.read_config());
-        assert_eq!(
-            config_manager.block_size(),
-            VirtioBlockConfig::sector_size(),
-            "currently not support customized device logical block size"
-        );
+        // assert_eq!(
+        //     config_manager.block_size(),
+        //     VirtioBlockConfig::sector_size(),
+        //     "currently not support customized device logical block size"
+        // );
         let num_queues = transport.num_queues();
         if num_queues != 1 {
             // FIXME: support Multi-Queue Block IO Queueing Mechanism

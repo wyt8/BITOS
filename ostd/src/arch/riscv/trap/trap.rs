@@ -210,7 +210,7 @@ impl UserContext {
 
     /// Set tls pointer
     pub fn set_tls(&mut self, tls: usize) {
-        self.general.gp = tls;
+        self.general.tp = tls;
     }
 }
 

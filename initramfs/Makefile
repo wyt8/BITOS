@@ -169,8 +169,8 @@ clean:
 	@rm -rf $(TMP_DIR)
 	@rm -rf $(TOOLCHAIN_DIR)
 
-.PHONY: test
-test: $(INITRAMFS)/bin
+# .PHONY: test
+# test: $(INITRAMFS)/bin
 
 # =========================== ToolChain ===============================
 
@@ -254,3 +254,10 @@ $(INITRAMFS)/etc:
 $(INITRAMFS)/root:
 	@mkdir -p $@
 	@cp -r $(CUR_DIR)/root/* $@
+
+test:
+	@make --no-print-directory -C $(TMP_DIR)/busybox defconfig CROSS_COMPILE=/home/wangyt/toolchain-loongarch64/bin/loongarch64-linux-gnu- ARCH=loongarch64
+	@# Modify the busybox config file to enable statically linked
+	@sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' $(TMP_DIR)/busybox/.config
+	@make --no-print-directory -C $(TMP_DIR)/busybox CROSS_COMPILE=/home/wangyt/toolchain-loongarch64/bin/loongarch64-linux-gnu- ARCH=loongarch64
+	@make --no-print-directory -C $(TMP_DIR)/busybox install CROSS_COMPILE=/home/wangyt/toolchain-loongarch64/bin/loongarch64-linux-gnu- ARCH=loongarch64

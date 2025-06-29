@@ -3,7 +3,7 @@
 //! Handles trap.
 
 mod trap;
-pub mod plic;
+// pub mod plic;
 
 use riscv::register::scause::{Exception, Interrupt};
 use spin::Once;
@@ -22,7 +22,7 @@ cpu_local_cell! {
 /// Initialize interrupt handling on RISC-V.
 pub unsafe fn init() {
     self::trap::init();
-    self::plic::init();
+    // self::plic::init();
 }
 
 /// Returns true if this function is called within the context of an IRQ handler

@@ -61,6 +61,7 @@ impl CapabilityMsixData {
         let pba_bar;
 
         let bar_manager = dev.bar_manager_mut();
+        #[cfg(not(target_arch = "loongarch64"))]
         match bar_manager
             .bar((pba_info & 0b111) as u8)
             .clone()
@@ -73,6 +74,21 @@ impl CapabilityMsixData {
                 panic!("MSIX cfg:pba BAR is IO type")
             }
         };
+        #[cfg(target_arch = "loongarch64")]
+        match bar_manager
+            .bar(4)
+            .clone()
+            .expect("MSIX cfg:pba BAR is none")
+        {
+            Bar::Memory(memory) => {
+                pba_bar = memory;
+            }
+            Bar::Io(_) => {
+                panic!("MSIX cfg:pba BAR is IO type")
+            }
+        };
+
+        #[cfg(not(target_arch = "loongarch64"))]
         match bar_manager
             .bar((table_info & 0b111) as u8)
             .clone()
@@ -85,6 +101,20 @@ impl CapabilityMsixData {
                 panic!("MSIX cfg:table BAR is IO type")
             }
         }
+
+        #[cfg(target_arch = "loongarch64")]
+        match bar_manager
+            .bar(4)
+            .clone()
+            .expect("MSIX cfg:table BAR is none")
+        {
+            Bar::Memory(memory) => {
+                table_bar = memory;
+            }
+            Bar::Io(_) => {
+                panic!("MSIX cfg:table BAR is IO type")
+            }
+        };
 
         let pba_offset = (pba_info & !(0b111u32)) as usize;
         let table_offset = (table_info & !(0b111u32)) as usize;

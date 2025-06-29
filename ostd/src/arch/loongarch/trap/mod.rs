@@ -1,25 +1,151 @@
-mod trap;
+// SPDX-License-Identifier: MPL-2.0
+
+//! Handles trap.
+
+pub mod trap;
+
+use core::arch::asm;
+
+use loongArch64::register::ecfg::LineBasedInterrupt;
+use spin::Once;
 pub use trap::{GeneralRegs, TrapFrame, UserContext};
 
-use crate::cpu::context::CpuExceptionInfo;
+use crate::{
+    arch::{boot::loongarch_boot, kernel::irq_ctrl::claim_interrupt, mm::tlb_flush_addr},
+    cpu::context::CpuExceptionInfo,
+    cpu_local_cell,
+    mm::MAX_USERSPACE_VADDR,
+    trap::call_irq_callback_functions,
+};
+
+cpu_local_cell! {
+    static IS_KERNEL_INTERRUPTED: bool = false;
+}
 
 pub unsafe fn init() {
     // self::trap::init();
     // self::plic::init();
-}
 
-/// Injects a custom handler for page faults that occur in the kernel and
-/// are caused by user-space address.
-pub fn inject_user_page_fault_handler(
-    handler: fn(info: &CpuExceptionInfo) -> core::result::Result<(), ()>,
-) {
-    // USER_PAGE_FAULT_HANDLER.call_once(|| handler);
 }
 
 /// Returns true if this function is called within the context of an IRQ handler
 /// and the IRQ occurs while the CPU is executing in the kernel mode.
 /// Otherwise, it returns false.
 pub fn is_kernel_interrupted() -> bool {
-    // IS_KERNEL_INTERRUPTED.load()
-    false
+    IS_KERNEL_INTERRUPTED.load()
+}
+
+/// Handle traps (only from kernel).
+#[no_mangle]
+extern "C" fn trap_handler(f: &mut TrapFrame) {
+    use loongArch64::register::estat::{self, Exception, Interrupt, Trap};
+    let cause = estat::read().cause();
+    let badi = loongArch64::register::badi::read().raw();
+    let badv = loongArch64::register::badv::read().vaddr();
+    let era = loongArch64::register::era::read().raw();
+    match cause {
+        Trap::Exception(exception) => match exception {
+            Exception::LoadPageFault
+            | Exception::StorePageFault
+            | Exception::FetchPageFault
+            | Exception::PageModifyFault
+            | Exception::PageNonReadableFault
+            | Exception::PageNonExecutableFault
+            | Exception::PagePrivilegeIllegal => {
+                tlb_flush_addr(badv);
+                log::warn!(
+                    "Page fault occurred: {:?}, badv: {badv:#x?}, badi: {badi:#x?}, era: {era:#x?}",
+                    exception
+                );
+                // Check if the page fault is caused by user-space address
+                if let Some(handler) = USER_PAGE_FAULT_HANDLER.get() {
+                    let page_fault_addr = badv;
+                    if (0..MAX_USERSPACE_VADDR).contains(&(page_fault_addr as usize)) {
+                        handler(&CpuExceptionInfo { code: exception, page_fault_addr: page_fault_addr, error_code: 0, instruction:  badi})
+                                .unwrap_or_else(|_| {
+                                    panic!(
+                                        "User page fault handler failed: addr: {page_fault_addr:#x}, err: {exception:?}"
+                                    );
+                                });
+                        return;
+                    }
+                }
+            }
+            Exception::PageModifyFault => {
+                // Set the page table entry to dirty
+                let badv = loongArch64::register::badv::read().vaddr();
+
+                // Set the tlb entry to dirty
+                unsafe {
+                    asm!("tlbsrch", "tlbrd");
+                }
+                assert_eq!(loongArch64::register::tlbidx::read().ne(), false);
+                loongArch64::register::tlbelo0::set_dirty(true);
+                loongArch64::register::tlbelo1::set_dirty(true);
+                unsafe {
+                    asm!("tlbwr");
+                }
+            }
+            Exception::PageNonReadableFault => todo!(),
+            Exception::PageNonExecutableFault => todo!(),
+            Exception::PagePrivilegeIllegal => todo!(),
+            Exception::FetchInstructionAddressError => todo!(),
+            Exception::MemoryAccessAddressError => {
+                let badv = loongArch64::register::badv::read().vaddr();
+                let retv = loongArch64::register::era::read().pc();
+                log::info!(
+                    "Memory access address error: {:x}, return address: {:x}",
+                    badv,
+                    retv
+                );
+            }
+            Exception::AddressNotAligned => todo!(),
+            Exception::BoundsCheckFault => todo!(),
+            Exception::Syscall => todo!(),
+            Exception::Breakpoint => todo!(),
+            Exception::InstructionNotExist => todo!(),
+            Exception::InstructionPrivilegeIllegal => todo!(),
+            Exception::FloatingPointUnavailable => {}
+            Exception::TLBRFill => todo!(),
+        },
+        Trap::Interrupt(interrupt) => {
+            IS_KERNEL_INTERRUPTED.store(true);
+            match interrupt {
+                Interrupt::SWI0 => todo!(),
+                Interrupt::SWI1 => todo!(),
+                Interrupt::HWI0
+                | Interrupt::HWI1
+                | Interrupt::HWI2
+                | Interrupt::HWI3
+                | Interrupt::HWI4
+                | Interrupt::HWI5
+                | Interrupt::HWI6
+                | Interrupt::HWI7 => {
+                    log::info!("Handling hardware interrupt: {:?}", interrupt);
+                    while let Some(irq_num) = claim_interrupt() {
+                        // Call the IRQ callback functions for the claimed interrupt
+                        call_irq_callback_functions(f, irq_num);
+                    }
+                }
+                Interrupt::PMI => todo!(),
+                Interrupt::Timer => todo!(),
+                Interrupt::IPI => todo!(),
+            }
+            IS_KERNEL_INTERRUPTED.store(false);
+        }
+        Trap::MachineError(machine_error) => todo!(),
+        Trap::Unknown => todo!(),
+    }
+}
+
+#[expect(clippy::type_complexity)]
+static USER_PAGE_FAULT_HANDLER: Once<fn(&CpuExceptionInfo) -> core::result::Result<(), ()>> =
+    Once::new();
+
+/// Injects a custom handler for page faults that occur in the kernel and
+/// are caused by user-space address.
+pub fn inject_user_page_fault_handler(
+    handler: fn(info: &CpuExceptionInfo) -> core::result::Result<(), ()>,
+) {
+    USER_PAGE_FAULT_HANDLER.call_once(|| handler);
 }

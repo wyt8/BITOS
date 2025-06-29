@@ -10,9 +10,9 @@ core::arch::global_asm!(include_str!("switch.S"));
 #[repr(C)]
 pub(crate) struct TaskContext {
     pub regs: CalleeRegs,
-    pub pc: usize,
+    pub ra: usize,
     /// Thread-local storage pointer.
-    pub fsbase: usize,
+    pub tp: usize,
 }
 
 /// Callee-saved registers.
@@ -20,27 +20,27 @@ pub(crate) struct TaskContext {
 #[repr(C)]
 pub struct CalleeRegs {
     /// sp
-    pub sp: u64,
+    pub sp: usize,
     /// fp
-    pub fp: u64,
+    pub fp: usize,
     /// s0
-    pub s0: u64,
+    pub s0: usize,
     /// s1
-    pub s1: u64,
+    pub s1: usize,
     /// s2
-    pub s2: u64,
+    pub s2: usize,
     /// s3
-    pub s3: u64,
+    pub s3: usize,
     /// s4
-    pub s4: u64,
+    pub s4: usize,
     /// s5
-    pub s5: u64,
+    pub s5: usize,
     /// s6
-    pub s6: u64,
+    pub s6: usize,
     /// s7
-    pub s7: u64,
+    pub s7: usize,
     /// s8
-    pub s8: u64,
+    pub s8: usize,
 }
 
 impl CalleeRegs {
@@ -66,37 +66,37 @@ impl TaskContext {
     pub const fn new() -> Self {
         TaskContext {
             regs: CalleeRegs::new(),
-            pc: 0,
-            fsbase: 0,
+            ra: 0,
+            tp: 0,
         }
     }
 
     /// Sets thread-local storage pointer.
     pub fn set_tls_pointer(&mut self, tls: usize) {
-        self.fsbase = tls;
+        self.tp = tls;
     }
 
     /// Gets thread-local storage pointer.
     pub fn tls_pointer(&self) -> usize {
-        self.fsbase
+        self.tp
     }
 }
 
 impl TaskContextApi for TaskContext {
     fn set_instruction_pointer(&mut self, ip: usize) {
-        self.pc = ip;
+        self.ra = ip;
     }
 
     fn instruction_pointer(&self) -> usize {
-        self.pc
+        self.ra
     }
 
     fn set_stack_pointer(&mut self, sp: usize) {
-        self.regs.sp = sp as u64;
+        self.regs.sp = sp;
     }
 
     fn stack_pointer(&self) -> usize {
-        self.regs.sp as usize
+        self.regs.sp
     }
 }
 

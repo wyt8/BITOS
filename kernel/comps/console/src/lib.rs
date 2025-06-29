@@ -78,8 +78,29 @@ struct Component {
 
 impl Component {
     pub fn init() -> Result<Self, ComponentInitError> {
+        use crate::alloc::string::ToString;
+        let serial_console = Arc::new(SerialConsole);
+        let mut inner: BTreeMap<String, Arc<dyn AnyConsoleDevice>> = BTreeMap::new();
+        inner.insert(SERIAL_CONSOLE_NAME.to_string(), serial_console);
         Ok(Self {
-            console_device_table: SpinLock::new(BTreeMap::new()),
+            console_device_table: SpinLock::new(inner),
         })
+    }
+}
+
+const SERIAL_CONSOLE_NAME: &str = "serial";
+
+#[derive(Debug)]
+struct SerialConsole;
+
+impl AnyConsoleDevice for SerialConsole {
+    fn send(&self, buf: &[u8]) {
+        for byte in buf {
+            ostd::arch::serial::send(*byte);
+        }
+    }
+
+    fn register_callback(&self, _callback: &'static ConsoleCallback) {
+        // do nothing
     }
 }

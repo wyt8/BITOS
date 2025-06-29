@@ -58,31 +58,31 @@ pub fn lazy_init() {
     let ext4_x0_device_name = "legacy_blk_0";
     let ext4_x1_device_name = "legacy_blk_1";
 
-    if let Ok(block_device_ext2) = start_block_device(ext2_device_name) {
-        let ext2_fs = Ext2::open(block_device_ext2).unwrap();
-        let target_path = FsPath::try_from("/ext2").unwrap();
-        println!("[kernel] Mount Ext2 fs at {:?} ", target_path);
-        self::rootfs::mount_fs_at(ext2_fs, &target_path).unwrap();
-    }
-
-    if let Ok(block_device_exfat) = start_block_device(exfat_device_name) {
-        let exfat_fs = ExfatFS::open(block_device_exfat, ExfatMountOptions::default()).unwrap();
-        let target_path = FsPath::try_from("/exfat").unwrap();
-        println!("[kernel] Mount ExFat fs at {:?} ", target_path);
-        self::rootfs::mount_fs_at(exfat_fs, &target_path).unwrap();
-    }
-
-    // if let Ok(block_device_ext4) = start_block_device(ext4_x0_device_name) {
-    //     let ext4_fs = Ext4::open(block_device_ext4).unwrap();
-    //     let target_path = FsPath::try_from("/ext4x0").unwrap();
-    //     println!("[kernel] Mount Ext4 fs at {:?} ", target_path);
-    //     self::rootfs::mount_fs_at(ext4_fs, &target_path).unwrap();
+    // if let Ok(block_device_ext2) = start_block_device(ext2_device_name) {
+    //     let ext2_fs = Ext2::open(block_device_ext2).unwrap();
+    //     let target_path = FsPath::try_from("/ext2").unwrap();
+    //     println!("[kernel] Mount Ext2 fs at {:?} ", target_path);
+    //     self::rootfs::mount_fs_at(ext2_fs, &target_path).unwrap();
     // }
 
+    // if let Ok(block_device_exfat) = start_block_device(exfat_device_name) {
+    //     let exfat_fs = ExfatFS::open(block_device_exfat, ExfatMountOptions::default()).unwrap();
+    //     let target_path = FsPath::try_from("/exfat").unwrap();
+    //     println!("[kernel] Mount ExFat fs at {:?} ", target_path);
+    //     self::rootfs::mount_fs_at(exfat_fs, &target_path).unwrap();
+    // }
+
+    // // if let Ok(block_device_ext4) = start_block_device(ext4_x0_device_name) {
+    // //     let ext4_fs = Ext4::open(block_device_ext4).unwrap();
+    // //     let target_path = FsPath::try_from("/ext4x0").unwrap();
+    // //     println!("[kernel] Mount Ext4 fs at {:?} ", target_path);
+    // //     self::rootfs::mount_fs_at(ext4_fs, &target_path).unwrap();
+    // // }
+
     if let Ok(block_device_ext4) = start_block_device(ext4_x0_device_name) {
-        let ext2_fs = Ext2::open(block_device_ext4).unwrap();
-        let target_path = FsPath::try_from("/ext4x1").unwrap();
-        println!("[kernel] Mount Ext2 fs at {:?} ", target_path);
-        self::rootfs::mount_fs_at(ext2_fs, &target_path).unwrap();
+        let ext4_fs = Ext4::open(block_device_ext4).unwrap();
+        let target_path = FsPath::try_from("/ext4").unwrap();
+        println!("[kernel] Mount Ext4 fs at {:?} ", target_path);
+        self::rootfs::mount_fs_at(ext4_fs, &target_path).unwrap();
     }
 }

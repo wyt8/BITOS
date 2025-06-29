@@ -1,4 +1,34 @@
+use core::arch::{asm, global_asm};
 use crate::Pod;
+
+#[cfg(target_arch = "loongarch64")]
+global_asm!(
+    r"
+    .equ XLENB, 8
+    .macro LOAD_SP a1, a2
+        ld.d \a1, $sp, \a2*XLENB
+    .endm
+    .macro STORE_SP a1, a2
+        st.d \a1, $sp, \a2*XLENB
+    .endm
+"
+);
+
+global_asm!(include_str!("trap.S"));
+// core::arch::global_asm!(
+//     include_str!("trap.S"),
+//     trapframe_size = const core::mem::size_of::<TrapFrame>(),
+// );
+// global_asm!(include_str!("trap.S"));
+
+/// Initialize exception and interrupt handling.
+pub fn init() {
+    // When VS=0, the entry address for all exceptions and interrupts is the same
+    loongArch64::register::ecfg::set_vs(0);
+    // Configure the entry address for normal exceptions and interrupts
+    loongArch64::register::eentry::set_eentry(trap_entry as usize);
+}
+
 
 /// General registers
 #[derive(Debug, Default, Clone, Copy, Pod)]
@@ -26,7 +56,7 @@ pub struct GeneralRegs {
     pub t6: usize,
     pub t7: usize,
     pub t8: usize,
-    pub u0: usize,
+    pub r21: usize,
     pub fp: usize,
     pub s0: usize,
     pub s1: usize,
@@ -38,7 +68,6 @@ pub struct GeneralRegs {
     pub s7: usize,
     pub s8: usize,
 }
-
 /// Trap frame of kernel interrupt
 ///
 /// # Trap handler
@@ -56,24 +85,72 @@ pub struct GeneralRegs {
 pub struct TrapFrame {
     /// General registers
     pub general: GeneralRegs,
-    /// Supervisor Status
-    pub sstatus: usize,
-    /// Supervisor Exception Program Counter
-    pub sepc: usize,
+    /// Pre-exception Mode Information
+    pub prmd: usize,
+    /// Exception Return Address
+    pub era: usize,
+    // /// Access Memory Address When Exception
+    // pub badv: usize,
+    // /// Current Mode Information
+    // pub crmd: usize,
+    // /// Kernel tp register
+    // pub ktp:  usize,
+    // /// Kernel r21 register
+    // pub kr21: usize,
+    // /// Fp register
+    // pub fs: [usize; 2],
 }
 
 /// Saved registers on a trap.
-#[derive(Debug, Default, Clone, Copy, Pod)]
+#[derive(Debug, Clone, Copy, Pod)]
 #[repr(C)]
 pub struct UserContext {
     /// General registers
     pub general: GeneralRegs,
-    /// Supervisor Status
-    pub sstatus: usize,
-    /// Supervisor Exception Program Counter
-    pub sepc: usize,
+    /// Pre-exception Mode Information
+    pub prmd: usize,
+    /// Exception Return Address
+    pub era: usize,
 }
 
+impl Default for UserContext {
+    fn default() -> Self {
+        UserContext {
+            general: GeneralRegs::default(),
+            prmd: 0b111, // User mode, enable interrupt
+            era: 0,
+        }
+    }
+}
+
+impl UserContext {
+    /// Go to user space with the context, and come back when a trap occurs.
+    ///
+    /// On return, the context will be reset to the status before the trap.
+    /// Trap reason and error code will be returned.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use trapframe::{UserContext, GeneralRegs};
+    ///
+    /// // init user space context
+    /// let mut context = UserContext {
+    ///     general: GeneralRegs {
+    ///         sp: 0x10000,
+    ///         ..Default::default()
+    ///     },
+    ///     era: 0x1000,
+    ///     ..Default::default()
+    /// };
+    /// // go to user
+    /// context.run();
+    /// // back from user
+    /// println!("back from user: {:#x?}", context);
+    /// ```
+    pub fn run(&mut self) {
+        unsafe { run_user(self) }
+    }
+}
 
 impl UserContext {
     /// Get number of syscall.
@@ -103,14 +180,19 @@ impl UserContext {
         ]
     }
 
+    /// Get instruction pointer.
+    pub fn get_ip(&self) -> usize {
+        self.era
+    }
+
     /// Set instruction pointer.
     pub fn set_ip(&mut self, ip: usize) {
-        // self.general.rip = ip;
+        self.era = ip;
     }
 
     /// Set stack pointer.
     pub fn set_sp(&mut self, sp: usize) {
-        // self.general.rsp = sp;
+        self.general.sp = sp;
     }
 
     /// Get stack pointer.
@@ -120,6 +202,12 @@ impl UserContext {
 
     /// Set thread-local storage pointer.
     pub fn set_tls(&mut self, tls: usize) {
-        // self.general.fsbase = tls;
+        self.general.tp = tls;
     }
+}
+
+#[expect(improper_ctypes)]
+unsafe extern "C" {
+    unsafe fn trap_entry();
+    unsafe fn run_user(regs: &mut UserContext);
 }

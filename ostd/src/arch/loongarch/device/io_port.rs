@@ -22,9 +22,34 @@ pub trait PortWrite: Sized {
     }
 }
 
-impl PortRead for u8 {}
-impl PortWrite for u8 {}
-impl PortRead for u16 {}
-impl PortWrite for u16 {}
-impl PortRead for u32 {}
-impl PortWrite for u32 {}
+impl PortRead for u8 {
+    unsafe fn read_from_port(port: u16) -> Self {
+        loongArch64::iocsr::iocsr_read_b(port as _)
+    }
+}
+
+impl PortWrite for u8 {
+    unsafe fn write_to_port(port: u16, value: Self) {
+        loongArch64::iocsr::iocsr_write_b(port as _, value);
+    }
+}
+impl PortRead for u16 {
+    unsafe fn read_from_port(port: u16) -> Self {
+        loongArch64::iocsr::iocsr_read_h(port as _)
+    }
+}
+impl PortWrite for u16 {
+    unsafe fn write_to_port(port: u16, value: Self) {
+        loongArch64::iocsr::iocsr_write_h(port as _, value);
+    }
+}
+impl PortRead for u32 {
+    unsafe fn read_from_port(port: u16) -> Self {
+        loongArch64::iocsr::iocsr_read_w(port as _)
+    }
+}
+impl PortWrite for u32 {
+    unsafe fn write_to_port(port: u16, value: Self) {
+        loongArch64::iocsr::iocsr_write_w(port as _, value);
+    }
+}

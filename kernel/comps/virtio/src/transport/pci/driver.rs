@@ -49,9 +49,11 @@ impl PciDriver for VirtioPciDriver {
         let device_id = *device.device_id();
         let transport: Box<dyn VirtioTransport> = match device_id.device_id {
             0x1000..0x1040 if (device.device_id().revision_id == 0) => {
-                // Transitional PCI Device ID in the range 0x1000 to 0x103f.
-                let legacy = VirtioPciLegacyTransport::new(device)?;
-                Box::new(legacy)
+                // // Transitional PCI Device ID in the range 0x1000 to 0x103f.
+                // let legacy = VirtioPciLegacyTransport::new(device)?;
+                // Box::new(legacy)
+                let modern = VirtioPciModernTransport::new(device)?;
+                Box::new(modern)
             }
             0x1040..0x107f => {
                 let modern = VirtioPciModernTransport::new(device)?;

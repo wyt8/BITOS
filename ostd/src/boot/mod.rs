@@ -29,6 +29,7 @@ pub struct BootInfo {
     pub framebuffer_arg: Option<BootloaderFramebufferArg>,
     /// The memory regions provided by the bootloader.
     pub memory_regions: Vec<MemoryRegion>,
+    pub embeded_data: [Option<&'static [u8]>; 10],
 }
 
 /// Gets the boot information.
@@ -87,6 +88,7 @@ pub(crate) struct EarlyBootInfo {
     pub(crate) acpi_arg: BootloaderAcpiArg,
     pub(crate) framebuffer_arg: Option<BootloaderFramebufferArg>,
     pub(crate) memory_regions: MemoryRegionArray,
+    pub(crate) embeded_data: [Option<&'static [u8]>; 10],
 }
 
 /// The boot-time information.
@@ -105,6 +107,7 @@ pub(crate) fn init_after_heap() {
         initramfs: boot_time_info.initramfs,
         framebuffer_arg: boot_time_info.framebuffer_arg,
         memory_regions: boot_time_info.memory_regions.to_vec(),
+        embeded_data: boot_time_info.embeded_data.clone(),
     });
 }
 
