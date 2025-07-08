@@ -67,3 +67,21 @@ qemu.args = """\
     -device virtio-serial-device \
     -device virtconsole,chardev=mux \
 """
+
+[scheme."loongarch"]
+boot.method = "qemu-direct"
+build.strip_elf = false
+run.boot.initramfs = "ostd/src/arch/loongarch/boot/initramfs.cpio"
+
+qemu.args = """\
+    -machine virt \
+    -m 8G \
+    -smp 1 \
+    --no-reboot \
+    -nographic \
+    -display none \
+    -serial chardev:mux \
+    -monitor chardev:mux \
+    -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
+    -rtc base=utc
+"""
