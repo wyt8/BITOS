@@ -467,6 +467,13 @@ pub(crate) unsafe fn init() -> Segment<MetaPageMeta> {
         max_paddr
     );
 
+    // In the riscv arch, the boot page table
+    // has mapped the 512GB memory, so don't need
+    // to add temp linear mappping.
+    // In the loongarch arch, the DWM0 has mapped
+    // all the memory, so don't need
+    // to add temp linear mapping.
+    #[cfg(target_arch = "x86_64")]
     add_temp_linear_mapping(max_paddr);
 
     let tot_nr_frames = max_paddr / page_size::<PagingConsts>(1);
@@ -599,6 +606,7 @@ fn mark_unusable_ranges() {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 /// Adds a temporary linear mapping for the metadata frames.
 ///
 /// We only assume boot page table to contain 4G linear mapping. Thus if the
